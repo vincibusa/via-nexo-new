@@ -44,15 +44,36 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error('Profile fetch error:', profileError)
+      // Logout user if profile not found
+      await supabase.auth.signOut()
+      return NextResponse.json(
+        { error: { code: 'PROFILE_NOT_FOUND', message: 'User profile not found' } },
+        { status: 404 }
+      )
+    }
+
+    // Check if user has admin or manager role
+    if (profile.role !== 'admin' && profile.role !== 'manager') {
+      // Logout the user
+      await supabase.auth.signOut()
+      return NextResponse.json(
+        {
+          error: {
+            code: 'ACCESS_DENIED',
+            message: 'Only admins and managers can access this panel'
+          }
+        },
+        { status: 403 }
+      )
     }
 
     return NextResponse.json({
       user: {
         id: authData.user.id,
         email: authData.user.email,
-        role: profile?.role || 'user',
-        displayName: profile?.display_name,
-        avatarUrl: profile?.avatar_url,
+        role: profile.role,
+        displayName: profile.display_name,
+        avatarUrl: profile.avatar_url,
       },
       session: {
         accessToken: authData.session?.access_token,

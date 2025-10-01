@@ -22,10 +22,15 @@ export async function POST(request: Request) {
 
     const supabase = await createClient()
 
-    // Sign up user
+    // Sign up user with metadata (trigger will create profile automatically)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          display_name: displayName || email.split('@')[0],
+        },
+      },
     })
 
     if (authError) {
@@ -42,26 +47,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create profile (using service role to bypass RLS)
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: authData.user.id,
-        email: authData.user.email!,
-        role: 'user',
-        display_name: displayName || email.split('@')[0],
-      })
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError)
-      // Don't fail the signup, profile can be created later
-    }
-
+    // Profile is automatically created by database trigger
     return NextResponse.json({
       user: {
         id: authData.user.id,
         email: authData.user.email,
-        role: 'user',
+        role: 'user', // Default role set by trigger
       },
       message: 'Signup successful. Please check your email for verification.',
     })

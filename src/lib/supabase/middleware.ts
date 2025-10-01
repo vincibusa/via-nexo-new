@@ -48,6 +48,17 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/'
       return NextResponse.redirect(url)
     }
+
+    // Log admin access
+    await supabase.from('audit_logs').insert({
+      actor_id: user.id,
+      action: 'ACCESS_ADMIN_PANEL',
+      entity_type: 'route',
+      entity_id: null,
+      changes: { path: request.nextUrl.pathname },
+      ip_address: request.ip || request.headers.get('x-forwarded-for') || 'unknown',
+      user_agent: request.headers.get('user-agent') || 'unknown',
+    })
   }
 
   if (request.nextUrl.pathname.startsWith('/manager') && user) {
