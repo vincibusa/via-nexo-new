@@ -31,21 +31,35 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Fetch place
+    // Fetch place with owner info
+    console.log(`[GET] Fetching place with id: ${id}`)
     const { data: place, error } = await supabase
       .from('places')
-      .select(`
-        *,
-        owner:profiles!places_owner_id_fkey(id, display_name, email)
-      `)
+      .select('*')
       .eq('id', id)
       .single()
 
     if (error) {
+      console.error(`[GET] Error fetching place:`, error)
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Place not found' }, { status: 404 })
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    console.log(`[GET] Place found:`, place?.id)
+
+    // Fetch owner separately to avoid schema cache issues
+    if (place?.owner_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('id', place.owner_id)
+        .single()
+
+      if (owner) {
+        place.owner = owner
+      }
     }
 
     return NextResponse.json({ place })
@@ -85,7 +99,49 @@ export async function PATCH(
     }
 
     // Get update data
-    const updates = await request.json()
+    const body = await request.json()
+    console.log(`[PATCH] Received fields:`, Object.keys(body))
+
+    // Whitelist of fields that can be updated
+    const allowedFields = [
+      'name',
+      'description',
+      'place_type',
+      'address',
+      'city',
+      'postal_code',
+      'country',
+      'location',
+      'lat',
+      'lon',
+      'phone',
+      'website',
+      'instagram_handle',
+      'facebook_url',
+      'opening_hours',
+      'cover_image_url',
+      'image_urls',
+      'verification_status',
+      'is_published',
+      'is_listed',
+      'price_range',
+      'ambience_tags',
+      'music_genre',
+      'avg_age_range',
+      'capacity',
+      'google_place_id',
+      'metadata'
+    ]
+
+    // Filter to only allowed fields
+    const updates: any = {}
+    for (const field of allowedFields) {
+      if (field in body) {
+        updates[field] = body[field]
+      }
+    }
+
+    console.log(`[PATCH] Updating place ${id} with:`, Object.keys(updates))
 
     // Update place
     const { data: place, error } = await supabase
@@ -95,15 +151,18 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
 
     if (error) {
+      console.error(`[PATCH] Error updating place:`, error)
       if (error.code === 'PGRST116') {
         return NextResponse.json({ error: 'Place not found' }, { status: 404 })
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    console.log(`[PATCH] Place updated successfully:`, place?.id)
 
     // Check if semantic fields were changed (trigger re-embedding)
     const semanticFields = ['name', 'description', 'ambience_tags', 'music_genre']
@@ -119,6 +178,19 @@ export async function PATCH(
           .from('places')
           .update({ embeddings_status: 'pending' })
           .eq('id', id)
+      }
+    }
+
+    // Fetch owner info separately if needed
+    if (place.owner_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('id', place.owner_id)
+        .single()
+
+      if (owner) {
+        place.owner = owner
       }
     }
 

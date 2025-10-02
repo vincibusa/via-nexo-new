@@ -98,7 +98,25 @@ export async function POST(request: NextRequest) {
     if (cached?.similar_places) {
       // Cache hit - return immediately
       console.log(`[RAG] ✅ Cache HIT for key: ${cacheKey}`)
-      return new Response(JSON.stringify(cached.similar_places), {
+
+      // Increment hit count (fire and forget)
+      supabase.from('embeddings_cache')
+        .update({ hit_count: (cached.similar_places.searchMetadata?.hit_count || 0) + 1 })
+        .eq('query_hash', cacheKey)
+        .then(() => console.log(`[Cache] Incremented hit_count for key: ${cacheKey}`))
+        .catch((err) => console.error('[Cache] Failed to increment hit_count:', err))
+
+      // Return cached result with cacheUsed: true
+      const cachedResult = {
+        ...cached.similar_places,
+        searchMetadata: {
+          ...cached.similar_places.searchMetadata,
+          cacheUsed: true,
+          processingTime: Date.now() - startTime,
+        }
+      }
+
+      return new Response(JSON.stringify(cachedResult), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
@@ -238,6 +256,7 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
           await supabase.from('embeddings_cache').upsert({
             query_hash: cacheKey,
             query_text: semanticQuery,
+            query_embedding: queryEmbedding,
             similar_places: {
               ...object,
               searchMetadata: {
@@ -248,9 +267,9 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
             },
             expires_at: expiresAt.toISOString(),
           })
-          console.log(`[Cache] Saved result for key: ${cacheKey}`)
+          console.log(`[Cache] ✅ Saved result for key: ${cacheKey}`)
         } catch (err) {
-          console.error('[Cache] Failed to save:', err)
+          console.error('[Cache] ❌ Failed to save:', err)
         }
       },
     })

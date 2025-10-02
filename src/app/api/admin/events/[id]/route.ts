@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { embedEvent } from '@/lib/jobs/embedding-job'
 
 export async function GET(
   request: NextRequest,
@@ -33,11 +34,7 @@ export async function GET(
     // Fetch event
     const { data: event, error } = await supabase
       .from('events')
-      .select(`
-        *,
-        place:places!events_place_id_fkey(id, name, city),
-        owner:profiles!events_owner_id_fkey(id, display_name, email)
-      `)
+      .select('*')
       .eq('id', id)
       .single()
 
@@ -46,6 +43,25 @@ export async function GET(
         return NextResponse.json({ error: 'Event not found' }, { status: 404 })
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Fetch related data separately to avoid schema cache issues
+    if (event?.place_id) {
+      const { data: place } = await supabase
+        .from('places')
+        .select('id, name, city')
+        .eq('id', event.place_id)
+        .single()
+      if (place) event.place = place
+    }
+
+    if (event?.owner_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('id', event.owner_id)
+        .single()
+      if (owner) event.owner = owner
     }
 
     return NextResponse.json({ event })
@@ -85,7 +101,39 @@ export async function PATCH(
     }
 
     // Get update data
-    const updates = await request.json()
+    const body = await request.json()
+
+    // Whitelist of fields that can be updated
+    const allowedFields = [
+      'title',
+      'description',
+      'event_type',
+      'start_datetime',
+      'end_datetime',
+      'place_id',
+      'location',
+      'genre',
+      'lineup',
+      'performers',
+      'ticket_url',
+      'ticket_price_min',
+      'ticket_price_max',
+      'cover_image_url',
+      'image_urls',
+      'is_published',
+      'is_featured',
+      'age_restriction',
+      'capacity',
+      'metadata'
+    ]
+
+    // Filter to only allowed fields
+    const updates: any = {}
+    for (const field of allowedFields) {
+      if (field in body) {
+        updates[field] = body[field]
+      }
+    }
 
     // Validate dates if provided
     if (updates.start_datetime && updates.end_datetime) {
@@ -105,7 +153,7 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
+      .select('*')
       .single()
 
     if (error) {
@@ -119,11 +167,36 @@ export async function PATCH(
     const semanticFields = ['title', 'description', 'genre', 'lineup']
     const changedSemanticFields = semanticFields.some(field => field in updates)
 
-    if (changedSemanticFields) {
-      await supabase
-        .from('events')
-        .update({ embeddings_status: 'pending' })
-        .eq('id', id)
+    if (changedSemanticFields && event.is_published) {
+      try {
+        await embedEvent(event.id, supabase)
+      } catch (embedError) {
+        console.error('Error embedding event after update:', embedError)
+        // Set status to pending if embedding fails
+        await supabase
+          .from('events')
+          .update({ embeddings_status: 'pending' })
+          .eq('id', id)
+      }
+    }
+
+    // Fetch related data separately
+    if (event?.place_id) {
+      const { data: place } = await supabase
+        .from('places')
+        .select('id, name, city')
+        .eq('id', event.place_id)
+        .single()
+      if (place) event.place = place
+    }
+
+    if (event?.owner_id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('id', event.owner_id)
+        .single()
+      if (owner) event.owner = owner
     }
 
     return NextResponse.json({ event })

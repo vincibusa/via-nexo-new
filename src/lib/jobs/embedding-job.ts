@@ -82,46 +82,55 @@ export async function embedPlace(placeId: string, supabaseClient?: any): Promise
 /**
  * Embed an event and store its embeddings
  */
-export async function embedEvent(eventId: string): Promise<void> {
-  const supabase = await createClient()
+export async function embedEvent(eventId: string, supabaseClient?: any): Promise<void> {
+  const supabase = supabaseClient || await createClient()
 
   try {
     // Update status to processing
-    await updateEmbeddingStatus('event', eventId, 'processing')
+    await updateEmbeddingStatus('event', eventId, 'processing', undefined, supabase)
 
-    // Fetch event data with place info
+    // Fetch event data
+    console.log(`[embedEvent] Fetching event ${eventId}`)
     const { data: event, error: fetchError } = await supabase
       .from('events')
-      .select(
-        `
-        id,
-        title,
-        description,
-        event_type,
-        location,
-        performers,
-        is_published,
-        place:places(name)
-      `
-      )
+      .select('id, title, description, event_type, genre, lineup, is_published, place_id')
       .eq('id', eventId)
       .single()
 
-    if (fetchError || !event) {
+    if (fetchError) {
+      console.error(`[embedEvent] Error fetching event:`, fetchError)
+      throw new Error(`Event not found: ${fetchError.message}`)
+    }
+
+    if (!event) {
+      console.error(`[embedEvent] Event ${eventId} returned null`)
       throw new Error('Event not found')
     }
+
+    console.log(`[embedEvent] Event found: ${event.title}`)
 
     // Skip if not published
     if (!event.is_published) {
       console.log(`Skipping event ${eventId} - not published`)
-      await updateEmbeddingStatus('event', eventId, 'pending')
+      await updateEmbeddingStatus('event', eventId, 'pending', undefined, supabase)
       return
+    }
+
+    // Fetch place name if event has a place_id
+    let placeName: string | null = null
+    if (event.place_id) {
+      const { data: place } = await supabase
+        .from('places')
+        .select('name')
+        .eq('id', event.place_id)
+        .single()
+      placeName = place?.name || null
     }
 
     // Extract text chunks
     const eventData = {
       ...event,
-      place_name: event.place?.name || null,
+      place_name: placeName,
     }
     const chunks = extractEventChunks(eventData)
 
@@ -133,10 +142,10 @@ export async function embedEvent(eventId: string): Promise<void> {
     const embeddings = await generateEmbeddings(chunks)
 
     // Store embeddings
-    await storeEmbeddings('event', eventId, chunks, embeddings)
+    await storeEmbeddings('event', eventId, chunks, embeddings, supabase)
 
     // Update status to completed
-    await updateEmbeddingStatus('event', eventId, 'completed')
+    await updateEmbeddingStatus('event', eventId, 'completed', undefined, supabase)
 
     console.log(
       `Successfully embedded event ${eventId} with ${chunks.length} chunks`
@@ -147,7 +156,7 @@ export async function embedEvent(eventId: string): Promise<void> {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error'
 
-    await updateEmbeddingStatus('event', eventId, 'failed', errorMessage)
+    await updateEmbeddingStatus('event', eventId, 'failed', errorMessage, supabase)
 
     throw error
   }
