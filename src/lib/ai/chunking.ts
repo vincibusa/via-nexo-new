@@ -59,17 +59,17 @@ export function extractPlaceChunks(place: {
   description?: string | null
   address?: string | null
   city?: string | null
-  category?: string | null
-  amenities?: string[] | null
-  music_genres?: string[] | null
-  menu_highlights?: string[] | null
+  place_type?: string | null
+  ambience_tags?: string[] | null
+  music_genre?: string[] | null
+  price_range?: string | null
 }): string[] {
   const chunks: string[] = []
 
-  // Primary chunk: name + category + city
+  // Primary chunk: name + place_type + city
   const primary = [
     place.name,
-    place.category,
+    place.place_type,
     place.city,
   ]
     .filter(Boolean)
@@ -93,19 +93,19 @@ export function extractPlaceChunks(place: {
     chunks.push(`${place.address}, ${place.city || ''}`.trim())
   }
 
-  // Amenities chunk
-  if (place.amenities && place.amenities.length > 0) {
-    chunks.push(`Amenities: ${place.amenities.join(', ')}`)
+  // Ambience tags chunk
+  if (place.ambience_tags && place.ambience_tags.length > 0) {
+    chunks.push(`Ambience: ${place.ambience_tags.join(', ')}`)
   }
 
-  // Music genres chunk
-  if (place.music_genres && place.music_genres.length > 0) {
-    chunks.push(`Music: ${place.music_genres.join(', ')}`)
+  // Music genre chunk
+  if (place.music_genre && place.music_genre.length > 0) {
+    chunks.push(`Music: ${place.music_genre.join(', ')}`)
   }
 
-  // Menu highlights chunk
-  if (place.menu_highlights && place.menu_highlights.length > 0) {
-    chunks.push(`Menu: ${place.menu_highlights.join(', ')}`)
+  // Price range chunk
+  if (place.price_range) {
+    chunks.push(`Price range: ${place.price_range}`)
   }
 
   return chunks.filter((chunk) => chunk.trim().length > 0)

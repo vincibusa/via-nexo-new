@@ -29,6 +29,15 @@ serve(async (req: Request) => {
     const adminAppUrl = Deno.env.get('ADMIN_APP_URL') || 'http://localhost:3000'
 
     if (type === 'place.created' || type === 'place.updated') {
+      // Invalidate cache on update
+      if (type === 'place.updated') {
+        await fetch(`${adminAppUrl}/api/webhooks/invalidate-cache`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, record }),
+        }).catch(err => console.error('Cache invalidation failed:', err))
+      }
+
       // Check if place is published and listed
       if (record.is_published && record.is_listed) {
         // Trigger embedding via admin API
@@ -78,6 +87,15 @@ serve(async (req: Request) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     } else if (type === 'event.created' || type === 'event.updated') {
+      // Invalidate cache on update
+      if (type === 'event.updated') {
+        await fetch(`${adminAppUrl}/api/webhooks/invalidate-cache`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, record }),
+        }).catch(err => console.error('Cache invalidation failed:', err))
+      }
+
       // Check if event is published
       if (record.is_published) {
         // Trigger embedding via admin API

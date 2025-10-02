@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { embedPlace } from '@/lib/jobs/embedding-job'
 
 export async function GET(request: NextRequest) {
   try {
@@ -160,6 +161,16 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating place:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Trigger embedding if place is published and listed
+    if (place.is_published && place.is_listed) {
+      try {
+        await embedPlace(place.id)
+      } catch (embedError) {
+        console.error('Error embedding place:', embedError)
+        // Continue anyway, don't fail the creation
+      }
     }
 
     return NextResponse.json({ place }, { status: 201 })

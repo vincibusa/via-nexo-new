@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { embedPlace } from '@/lib/jobs/embedding-job'
 
 export async function GET(
   request: NextRequest,
@@ -108,11 +109,17 @@ export async function PATCH(
     const semanticFields = ['name', 'description', 'ambience_tags', 'music_genre']
     const changedSemanticFields = semanticFields.some(field => field in updates)
 
-    if (changedSemanticFields) {
-      await supabase
-        .from('places')
-        .update({ embeddings_status: 'pending' })
-        .eq('id', id)
+    if (changedSemanticFields && place.is_published && place.is_listed) {
+      try {
+        await embedPlace(place.id)
+      } catch (embedError) {
+        console.error('Error embedding place after update:', embedError)
+        // Set status to pending if embedding fails
+        await supabase
+          .from('places')
+          .update({ embeddings_status: 'pending' })
+          .eq('id', id)
+      }
     }
 
     return NextResponse.json({ place })

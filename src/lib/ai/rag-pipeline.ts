@@ -174,14 +174,25 @@ export async function vectorSearch(
   })
 
   if (error) {
-    console.error('Error in vector search:', error)
+    console.error('[Vector Search] Error:', error)
     return []
   }
 
-  return (data || []).map((row: any) => ({
-    placeId: row.resource_id,
+  const results = (data || []).map((row: any) => ({
+    placeId: row.entity_id,
     similarity: row.similarity,
   }))
+
+  console.log(`[Vector Search] Raw results: ${results.length} embeddings`)
+
+  // Group by placeId to see duplicates
+  const byPlace = results.reduce((acc: any, r: any) => {
+    acc[r.placeId] = (acc[r.placeId] || 0) + 1
+    return acc
+  }, {})
+  console.log(`[Vector Search] Unique places:`, Object.keys(byPlace).length)
+
+  return results
 }
 
 /**
@@ -198,15 +209,18 @@ export async function reRank(
   }
 
   // Fetch full metadata for top K places
+  console.log(`[Re-rank] Fetching metadata for ${topKIds.length} place IDs`)
   const { data: places, error } = await supabase
     .from('places')
     .select('*')
     .in('id', topKIds)
 
   if (error || !places) {
-    console.error('Error fetching place metadata:', error)
+    console.error('[Re-rank] Error fetching place metadata:', error)
     return []
   }
+
+  console.log(`[Re-rank] Fetched ${places.length} unique places from DB`)
 
   // Calculate distance for each place
   const placesWithScores = places.map((place) => {
@@ -373,11 +387,10 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-5-mini'),
+      model: openai('gpt-5-mini'), // Reasoning model, no temperature parameter
       schema: suggestionSchema,
       system: systemPrompt,
       prompt: userPrompt,
-      temperature: 0.3,
     })
 
     // Validate that all placeIds exist in topN

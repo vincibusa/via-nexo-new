@@ -9,12 +9,12 @@ import {
 /**
  * Embed a place and store its embeddings
  */
-export async function embedPlace(placeId: string): Promise<void> {
-  const supabase = await createClient()
+export async function embedPlace(placeId: string, supabaseClient?: any): Promise<void> {
+  const supabase = supabaseClient || await createClient()
 
   try {
     // Update status to processing
-    await updateEmbeddingStatus('place', placeId, 'processing')
+    await updateEmbeddingStatus('place', placeId, 'processing', undefined, supabase)
 
     // Fetch place data
     const { data: place, error: fetchError } = await supabase
@@ -26,10 +26,10 @@ export async function embedPlace(placeId: string): Promise<void> {
         description,
         address,
         city,
-        category,
-        amenities,
-        music_genres,
-        menu_highlights,
+        place_type,
+        ambience_tags,
+        music_genre,
+        price_range,
         is_published,
         is_listed
       `

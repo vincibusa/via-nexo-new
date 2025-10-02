@@ -1,9 +1,9 @@
 import { embedMany } from 'ai'
-import { openai } from '@ai-sdk/openai'
 import { createClient } from '@/lib/supabase/server'
 
 /**
  * Generate embeddings for an array of text chunks using Vercel AI SDK
+ * Uses AI Gateway with automatic routing via AI_GATEWAY_API_KEY
  */
 export async function generateEmbeddings(
   texts: string[]
@@ -14,7 +14,7 @@ export async function generateEmbeddings(
 
   try {
     const { embeddings } = await embedMany({
-      model: openai.embedding('text-embedding-3-small'),
+      model: 'openai/text-embedding-3-small',
       values: texts,
     })
 
@@ -40,24 +40,27 @@ export async function storeEmbeddings(
   resourceType: 'place' | 'event',
   resourceId: string,
   chunks: string[],
-  embeddings: number[][]
+  embeddings: number[][],
+  supabaseClient?: any
 ): Promise<void> {
-  const supabase = await createClient()
+  const supabase = supabaseClient || await createClient()
 
   // Delete existing embeddings for this resource
   await supabase
     .from('embeddings')
     .delete()
-    .eq('resource_type', resourceType)
-    .eq('resource_id', resourceId)
+    .eq('entity_type', resourceType)
+    .eq('entity_id', resourceId)
 
   // Insert new embeddings
   const embeddingsData = chunks.map((chunk, index) => ({
-    resource_type: resourceType,
-    resource_id: resourceId,
-    chunk_text: chunk,
-    chunk_index: index,
+    entity_type: resourceType,
+    entity_id: resourceId,
+    chunk_id: index,
+    field_name: 'content',
+    snippet_text: chunk,
     embedding: embeddings[index],
+    lang: 'it',
   }))
 
   const { error } = await supabase.from('embeddings').insert(embeddingsData)
@@ -75,9 +78,10 @@ export async function updateEmbeddingStatus(
   resourceType: 'place' | 'event',
   resourceId: string,
   status: 'pending' | 'processing' | 'completed' | 'failed',
-  error?: string
+  error?: string,
+  supabaseClient?: any
 ): Promise<void> {
-  const supabase = await createClient()
+  const supabase = supabaseClient || await createClient()
 
   const table = resourceType === 'place' ? 'places' : 'events'
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { embedEvent } from '@/lib/jobs/embedding-job'
 
 export async function GET(request: NextRequest) {
   try {
@@ -184,6 +185,16 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating event:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Trigger embedding if event is published
+    if (event.is_published) {
+      try {
+        await embedEvent(event.id)
+      } catch (embedError) {
+        console.error('Error embedding event:', embedError)
+        // Continue anyway, don't fail the creation
+      }
     }
 
     return NextResponse.json({ event }, { status: 201 })
