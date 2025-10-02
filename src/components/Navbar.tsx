@@ -80,12 +80,12 @@ export function Navbar() {
 
           {user && (
             <div className="flex items-center gap-4">
-              {user.isAdmin && (
+              {user.role === 'admin' && (
                 <Link href="/admin" className="text-sm hover:underline">
                   Admin Panel
                 </Link>
               )}
-              {user.isManager && (
+              {user.role === 'manager' && (
                 <Link href="/manager" className="text-sm hover:underline">
                   Manager Panel
                 </Link>

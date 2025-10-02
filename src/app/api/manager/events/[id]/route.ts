@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { embedPlace } from '@/lib/jobs/embedding-job'
+import { embedEvent } from '@/lib/jobs/embedding-job'
 
 export async function GET(
   request: NextRequest,
@@ -30,21 +30,31 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Fetch place - ensure it belongs to this manager
-    const { data: place, error } = await supabase
-      .from('places')
+    // Fetch event - ensure it belongs to this manager
+    const { data: event, error } = await supabase
+      .from('events')
       .select('*')
       .eq('id', id)
-      .eq('manager_id', user.id)
+      .eq('owner_id', user.id)
       .single()
 
-    if (error || !place) {
-      return NextResponse.json({ error: 'Place not found' }, { status: 404 })
+    if (error || !event) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
     }
 
-    return NextResponse.json(place)
+    // Fetch place info separately if needed
+    if (event?.place_id) {
+      const { data: place } = await supabase
+        .from('places')
+        .select('id, name, city')
+        .eq('id', event.place_id)
+        .single()
+      if (place) event.place = place
+    }
+
+    return NextResponse.json({ event })
   } catch (error) {
-    console.error('Error fetching place:', error)
+    console.error('Error fetching event:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -81,13 +91,13 @@ export async function PATCH(
     }
 
     // Verify ownership
-    const { data: existingPlace } = await supabase
-      .from('places')
-      .select('manager_id')
+    const { data: existingEvent } = await supabase
+      .from('events')
+      .select('owner_id')
       .eq('id', id)
       .single()
 
-    if (!existingPlace || existingPlace.manager_id !== user.id) {
+    if (!existingEvent || existingEvent.owner_id !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -96,44 +106,87 @@ export async function PATCH(
     // Managers cannot change verification_status
     delete body.verification_status
 
-    // Update place
-    const { data: place, error } = await supabase
-      .from('places')
-      .update(body)
+    // Whitelist of fields that can be updated
+    const allowedFields = [
+      'title',
+      'description',
+      'event_type',
+      'start_datetime',
+      'end_datetime',
+      'place_id',
+      'genre',
+      'lineup',
+      'ticket_url',
+      'ticket_price_min',
+      'ticket_price_max',
+      'cover_image_url',
+      'image_urls',
+      'is_published',
+      'is_featured',
+      'age_restriction',
+      'capacity',
+      'metadata'
+    ]
+
+    // Filter to only allowed fields
+    const updates: any = {}
+    for (const field of allowedFields) {
+      if (field in body) {
+        updates[field] = body[field]
+      }
+    }
+
+    // Update event
+    const { data: event, error } = await supabase
+      .from('events')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
-      .eq('manager_id', user.id)
-      .select()
+      .eq('owner_id', user.id)
+      .select('*')
       .single()
 
     if (error) {
-      console.error('Error updating place:', error)
+      console.error('Error updating event:', error)
       return NextResponse.json(
-        { error: 'Failed to update place' },
+        { error: 'Failed to update event' },
         { status: 500 }
       )
     }
 
     // Check if semantic fields were changed (trigger re-embedding)
-    const semanticFields = ['name', 'description', 'ambience_tags', 'music_genre']
-    const changedSemanticFields = semanticFields.some(field => field in body)
+    const semanticFields = ['title', 'description', 'genre', 'lineup']
+    const changedSemanticFields = semanticFields.some(field => field in updates)
 
-    if (changedSemanticFields && place.is_published && place.is_listed) {
+    if (changedSemanticFields && event.is_published) {
       try {
-        console.log(`[Manager API] Triggering re-embedding for updated place ${place.id}`)
-        await embedPlace(place.id, supabase)
+        console.log(`[Manager API] Triggering re-embedding for updated event ${event.id}`)
+        await embedEvent(event.id, supabase)
       } catch (embedError) {
-        console.error('Error embedding place after update:', embedError)
+        console.error('Error embedding event after update:', embedError)
         // Set status to pending if embedding fails
         await supabase
-          .from('places')
+          .from('events')
           .update({ embeddings_status: 'pending' })
           .eq('id', id)
       }
     }
 
-    return NextResponse.json({ place })
+    // Fetch related data separately
+    if (event?.place_id) {
+      const { data: place } = await supabase
+        .from('places')
+        .select('id, name, city')
+        .eq('id', event.place_id)
+        .single()
+      if (place) event.place = place
+    }
+
+    return NextResponse.json({ event })
   } catch (error) {
-    console.error('Error in update place API:', error)
+    console.error('Error in update event API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -169,24 +222,31 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Delete place - RLS will ensure only owned places can be deleted
+    // Delete embeddings first (cascade should handle this, but being explicit)
+    await supabase
+      .from('embeddings')
+      .delete()
+      .eq('entity_type', 'event')
+      .eq('entity_id', id)
+
+    // Delete event - RLS will ensure only owned events can be deleted
     const { error } = await supabase
-      .from('places')
+      .from('events')
       .delete()
       .eq('id', id)
-      .eq('manager_id', user.id)
+      .eq('owner_id', user.id)
 
     if (error) {
-      console.error('Error deleting place:', error)
+      console.error('Error deleting event:', error)
       return NextResponse.json(
-        { error: 'Failed to delete place' },
+        { error: 'Failed to delete event' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in delete place API:', error)
+    console.error('Error in delete event API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

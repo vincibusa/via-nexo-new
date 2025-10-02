@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = await createClient()
 
     // Check if user is admin
@@ -43,7 +44,7 @@ export async function POST(
     const { data: managerRequest, error: fetchError } = await supabase
       .from('manager_requests')
       .select('user_id, status')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (fetchError || !managerRequest) {
@@ -69,7 +70,7 @@ export async function POST(
         reviewed_at: new Date().toISOString(),
         reviewed_by: user.id,
       })
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (updateError) {
       console.error('Error updating manager request:', updateError)
@@ -84,7 +85,7 @@ export async function POST(
       user_id: user.id,
       action: 'manager_request_rejected',
       resource_type: 'manager_request',
-      resource_id: params.id,
+      resource_id: id,
       details: {
         rejected_user_id: managerRequest.user_id,
         review_notes,

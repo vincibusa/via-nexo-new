@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { embedPlace } from '@/lib/jobs/embedding-job'
+import { embedEvent } from '@/lib/jobs/embedding-job'
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,42 +32,41 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
     const filter = searchParams.get('filter') || 'all'
-    const category = searchParams.get('category') || 'all'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    // Build query - only manager's own places
+    // Build query - only manager's own events
     let query = supabase
-      .from('places')
+      .from('events')
       .select('*', { count: 'exact' })
-      .eq('manager_id', user.id)
-      .order('created_at', { ascending: false })
+      .eq('owner_id', user.id)
+      .order('start_datetime', { ascending: false })
 
     // Apply filters
     if (search) {
-      query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%,city.ilike.%${search}%`)
+      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
     }
 
     if (filter === 'published') {
       query = query.eq('is_published', true)
     } else if (filter === 'unpublished') {
       query = query.eq('is_published', false)
-    }
-
-    if (category !== 'all') {
-      query = query.eq('place_type', category)
+    } else if (filter === 'upcoming') {
+      query = query.gte('start_datetime', new Date().toISOString())
+    } else if (filter === 'past') {
+      query = query.lt('start_datetime', new Date().toISOString())
     }
 
     // Apply pagination
     query = query.range(from, to)
 
-    const { data: places, error, count } = await query
+    const { data: events, error, count } = await query
 
     if (error) {
-      console.error('Error fetching places:', error)
+      console.error('Error fetching events:', error)
       return NextResponse.json(
-        { error: 'Failed to fetch places' },
+        { error: 'Failed to fetch events' },
         { status: 500 }
       )
     }
@@ -75,7 +74,7 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil((count || 0) / limit)
 
     return NextResponse.json({
-      places: places || [],
+      events: events || [],
       pagination: {
         page,
         limit,
@@ -84,7 +83,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Error in manager places API:', error)
+    console.error('Error in manager events API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -118,43 +117,43 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Auto-set manager_id and default values
-    const placeData = {
+    // Auto-set owner_id and default values
+    const eventData = {
       ...body,
-      manager_id: user.id,
+      owner_id: user.id,
       verification_status: 'pending',
       embeddings_status: 'pending',
     }
 
-    const { data: place, error } = await supabase
-      .from('places')
-      .insert(placeData)
+    const { data: event, error } = await supabase
+      .from('events')
+      .insert(eventData)
       .select()
       .single()
 
     if (error) {
-      console.error('Error creating place:', error)
+      console.error('Error creating event:', error)
       return NextResponse.json(
-        { error: 'Failed to create place' },
+        { error: 'Failed to create event' },
         { status: 500 }
       )
     }
 
-    // Trigger automatic embedding if published and listed
-    if (place.is_published && place.is_listed) {
+    // Trigger automatic embedding if published
+    if (event.is_published) {
       try {
-        console.log(`[Manager API] Triggering embedding for new place ${place.id}`)
-        await embedPlace(place.id, supabase)
+        console.log(`[Manager API] Triggering embedding for new event ${event.id}`)
+        await embedEvent(event.id, supabase)
       } catch (embedError) {
-        console.error('Error embedding place after creation:', embedError)
+        console.error('Error embedding event after creation:', embedError)
         // Don't fail the request, just log the error
         // Status will remain 'pending' and can be retried later
       }
     }
 
-    return NextResponse.json({ place }, { status: 201 })
+    return NextResponse.json({ event }, { status: 201 })
   } catch (error) {
-    console.error('Error in create place API:', error)
+    console.error('Error in create event API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

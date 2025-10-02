@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const supabase = await createClient()
 
     // Check if user is admin
@@ -37,7 +38,7 @@ export async function GET(
         user:profiles!manager_requests_user_id_fkey(email, display_name)
       `
       )
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (error) {

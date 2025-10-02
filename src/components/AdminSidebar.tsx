@@ -97,7 +97,7 @@ export function AdminSidebar({ isMobileMenuOpen = false, setIsMobileMenuOpen }: 
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
               <AvatarImage src={user.avatarUrl || undefined} />
-              <AvatarFallback>{getInitials(user.displayName, user.email)}</AvatarFallback>
+              <AvatarFallback>{getInitials(user.displayName || '', user.email || '')}</AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
               <p className="truncate text-sm font-medium">{user.displayName || user.email}</p>

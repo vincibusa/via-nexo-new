@@ -100,10 +100,11 @@ export async function POST(request: NextRequest) {
       console.log(`[RAG] ✅ Cache HIT for key: ${cacheKey}`)
 
       // Increment hit count (fire and forget)
-      supabase.from('embeddings_cache')
-        .update({ hit_count: (cached.similar_places.searchMetadata?.hit_count || 0) + 1 })
-        .eq('query_hash', cacheKey)
-        .then(() => console.log(`[Cache] Incremented hit_count for key: ${cacheKey}`))
+      Promise.resolve(
+        supabase.from('embeddings_cache')
+          .update({ hit_count: (cached.similar_places.searchMetadata?.hit_count || 0) + 1 })
+          .eq('query_hash', cacheKey)
+      ).then(() => console.log(`[Cache] Incremented hit_count for key: ${cacheKey}`))
         .catch((err) => console.error('[Cache] Failed to increment hit_count:', err))
 
       // Return cached result with cacheUsed: true
