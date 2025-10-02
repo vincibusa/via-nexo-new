@@ -218,6 +218,17 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
       onFinish: async ({ object }) => {
         console.log(`[RAG] ✅ LLM generation completed`)
         console.log(`[RAG] Generated ${object?.suggestions?.length || 0} suggestions`)
+
+        // Log LLM response details
+        if (object?.suggestions) {
+          console.log(`[RAG] 📋 LLM Suggestions:`)
+          object.suggestions.forEach((s: any, i: number) => {
+            console.log(`  ${i + 1}. Place ID: ${s.placeId}`)
+            console.log(`     Reason: "${s.reason}"`)
+            console.log(`     Match Score: ${s.matchScore} | Confidence: ${s.confidence}`)
+          })
+        }
+
         // Cache the final result in Supabase (fire and forget)
         if (!object) return
 
