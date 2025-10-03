@@ -12,7 +12,7 @@ import path from 'path'
  */
 export interface SuggestionContext {
   companionship?: 'alone' | 'partner' | 'friends' | 'family'
-  mood?: 'relaxed' | 'energetic' | 'romantic' | 'adventurous'
+  mood?: 'relaxed' | 'energetic' | 'romantic' | 'adventurous' | 'cultural'
   budget?: '€' | '€€' | '€€€' | '€€€€'
   time?: 'morning' | 'afternoon' | 'evening' | 'night'
   location: { lat: number; lon: number }
@@ -126,6 +126,7 @@ export function buildSemanticQuery(context: SuggestionContext): string {
       energetic: 'energico',
       romantic: 'romantico',
       adventurous: 'avventuroso',
+      cultural: 'culturale',
     }
     parts.push(`atmosfera ${moodMap[context.mood]}`)
   }
