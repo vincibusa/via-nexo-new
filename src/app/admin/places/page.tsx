@@ -22,7 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Search, Filter, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Plus, Search, Filter, Trash2, Eye, EyeOff, Zap } from 'lucide-react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { toast } from 'sonner'
 
@@ -65,6 +65,7 @@ export default function PlacesListPage() {
   const [category, setCategory] = useState('all')
   const [selectedPlaces, setSelectedPlaces] = useState<string[]>([])
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [embeddingLoading, setEmbeddingLoading] = useState<string[]>([])
 
   useEffect(() => {
     fetchPlaces()
@@ -189,6 +190,33 @@ export default function PlacesListPage() {
       toast.error('Errore durante l\'eliminazione')
     } finally {
       setBulkActionLoading(false)
+    }
+  }
+
+  const handleTriggerEmbedding = async (placeId: string) => {
+    try {
+      setEmbeddingLoading(prev => [...prev, placeId])
+      
+      const response = await fetch('/api/admin/embeddings/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          resource_type: 'place', 
+          resource_id: placeId 
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Embedding avviato con successo')
+        fetchPlaces()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Errore durante l\'avvio dell\'embedding')
+      }
+    } catch (error) {
+      toast.error('Errore durante l\'avvio dell\'embedding')
+    } finally {
+      setEmbeddingLoading(prev => prev.filter(id => id !== placeId))
     }
   }
 
@@ -365,10 +393,25 @@ export default function PlacesListPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>{getEmbeddingBadge(place.embeddings_status)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="sm">
-                        <Link href={`/admin/places/${place.id}`}>Modifica</Link>
-                      </Button>
+                    <TableCell className="text-right" style={{pointerEvents: 'auto'}}>
+                      <div className="flex items-center gap-1 justify-end" style={{pointerEvents: 'auto'}}>
+                        <Button asChild variant="outline" size="sm">
+                          <span
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleTriggerEmbedding(place.id)
+                            }}
+                            style={{cursor: 'pointer'}}
+                            className="h-8 px-2"
+                          >
+                            <Zap className="h-4 w-4" />
+                          </span>
+                        </Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/admin/places/${place.id}`}>Modifica</Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -419,7 +462,21 @@ export default function PlacesListPage() {
                   Manager: {place.owner?.display_name || place.owner?.email || '-'}
                 </div>
                 
-                <div className="flex justify-end pt-2 border-t">
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <Button asChild variant="outline" size="sm" className="min-h-[36px]">
+                    <span
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleTriggerEmbedding(place.id)
+                      }}
+                      style={{cursor: 'pointer'}}
+                      className="px-3"
+                      title="Avvia embedding"
+                    >
+                      <Zap className="h-4 w-4" />
+                    </span>
+                  </Button>
                   <Button asChild variant="outline" size="sm" className="min-h-[36px]">
                     <Link href={`/admin/places/${place.id}`}>Modifica</Link>
                   </Button>

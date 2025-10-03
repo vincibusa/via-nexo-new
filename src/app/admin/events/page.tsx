@@ -22,7 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Search, Trash2, Eye, EyeOff, Calendar } from 'lucide-react'
+import { Plus, Search, Trash2, Eye, EyeOff, Calendar, Zap } from 'lucide-react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -74,6 +74,7 @@ export default function EventsListPage() {
   const [dateFilter, setDateFilter] = useState('all')
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [embeddingLoading, setEmbeddingLoading] = useState<string[]>([])
 
   useEffect(() => {
     fetchEvents()
@@ -164,6 +165,7 @@ export default function EventsListPage() {
         fetch(`/api/admin/events/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ is_published: published }),
         })
       )
@@ -192,7 +194,10 @@ export default function EventsListPage() {
     try {
       setBulkActionLoading(true)
       const promises = selectedEvents.map(id =>
-        fetch(`/api/admin/events/${id}`, { method: 'DELETE' })
+        fetch(`/api/admin/events/${id}`, { 
+          method: 'DELETE',
+          credentials: 'include'
+        })
       )
 
       await Promise.all(promises)
@@ -203,6 +208,33 @@ export default function EventsListPage() {
       toast.error('Errore durante l\'eliminazione')
     } finally {
       setBulkActionLoading(false)
+    }
+  }
+
+  const handleTriggerEmbedding = async (eventId: string) => {
+    try {
+      setEmbeddingLoading(prev => [...prev, eventId])
+      
+      const response = await fetch('/api/admin/embeddings/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          resource_type: 'event', 
+          resource_id: eventId 
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Embedding avviato con successo')
+        fetchEvents()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Errore durante l\'avvio dell\'embedding')
+      }
+    } catch (error) {
+      toast.error('Errore durante l\'avvio dell\'embedding')
+    } finally {
+      setEmbeddingLoading(prev => prev.filter(id => id !== eventId))
     }
   }
 
@@ -397,9 +429,25 @@ export default function EventsListPage() {
                     </TableCell>
                     <TableCell>{getEmbeddingBadge(event.embeddings_status)}</TableCell>
                     <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="sm">
-                        <Link href={`/admin/events/${event.id}`}>Modifica</Link>
-                      </Button>
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button asChild variant="outline" size="sm">
+                          <span
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleTriggerEmbedding(event.id)
+                            }}
+                            style={{cursor: 'pointer'}}
+                            className="h-8 px-2"
+                            title="Avvia embedding"
+                          >
+                            <Zap className="h-4 w-4" />
+                          </span>
+                        </Button>
+                        <Button asChild variant="ghost" size="sm">
+                          <Link href={`/admin/events/${event.id}`}>Modifica</Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -456,7 +504,21 @@ export default function EventsListPage() {
                   {getEmbeddingBadge(event.embeddings_status)}
                 </div>
 
-                <div className="flex justify-end pt-2 border-t">
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <Button asChild variant="outline" size="sm" className="min-h-[36px]">
+                    <span
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleTriggerEmbedding(event.id)
+                      }}
+                      style={{cursor: 'pointer'}}
+                      className="px-3"
+                      title="Avvia embedding"
+                    >
+                      <Zap className="h-4 w-4" />
+                    </span>
+                  </Button>
                   <Button asChild variant="outline" size="sm" className="min-h-[36px]">
                     <Link href={`/admin/events/${event.id}`}>Modifica</Link>
                   </Button>
