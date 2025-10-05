@@ -290,10 +290,14 @@ export async function POST(request: NextRequest) {
     const responsePrompt = fs.readFileSync(responsePromptPath, 'utf-8')
 
     // Build user prompt for LLM with both places and events
-    const placesSection = topN.filter(item => 'name' in item.metadata).length > 0 ? `
+    const placesForLLM = topN.filter(item => 'name' in item.metadata);
+    const eventsForLLM = topN.filter(item => 'title' in item.metadata);
+    
+    console.log(`[Chat] 🎯 Sending to LLM: ${placesForLLM.length} places, ${eventsForLLM.length} events`);
+    
+    const placesSection = placesForLLM.length > 0 ? `
 LOCALI DISPONIBILI (ordinati per rilevanza):
-${topN
-  .filter(item => 'name' in item.metadata)
+${placesForLLM
   .map(
     (item, idx) => `
 ${idx + 1}. ${item.metadata.name} (ID: ${item.placeId}, TIPO: place)
@@ -310,10 +314,9 @@ ${idx + 1}. ${item.metadata.name} (ID: ${item.placeId}, TIPO: place)
   )
   .join('\n')}` : '';
 
-    const eventsSection = topN.filter(item => 'title' in item.metadata).length > 0 ? `
+    const eventsSection = eventsForLLM.length > 0 ? `
 EVENTI DISPONIBILI (ordinati per rilevanza):
-${topN
-  .filter(item => 'title' in item.metadata)
+${eventsForLLM
   .map(
     (item, idx) => `
 ${idx + 1}. ${item.metadata.title} (ID: ${item.eventId}, TIPO: event)
@@ -363,11 +366,23 @@ Spiega brevemente perché ogni opzione è perfetta per loro.
         // Log LLM response details
         if (object?.suggestions) {
           console.log(`[Chat] 📋 LLM Suggestions:`)
+          
+          // Count types
+          const placeCount = object.suggestions.filter((s: any) => s.type === 'place').length;
+          const eventCount = object.suggestions.filter((s: any) => s.type === 'event').length;
+          console.log(`[Chat] 🎯 LLM chose: ${placeCount} places, ${eventCount} events`);
+          
           object.suggestions.forEach((s: any, i: number) => {
-            console.log(`  ${i + 1}. Place ID: ${s.placeId}`)
-            console.log(`     Reason: "${s.reason}"`)
+            console.log(`  ${i + 1}. [${s.type.toUpperCase()}] ID: ${s.id}`)
+            console.log(`     Reason: "${s.reason.substring(0, 100)}..."`)
             console.log(`     Match Score: ${s.matchScore} | Confidence: ${s.confidence}`)
           })
+          
+          // Log if LLM ignored events
+          if (eventsForLLM.length > 0 && eventCount === 0) {
+            console.log(`[Chat] ⚠️  LLM ignored ${eventsForLLM.length} available events`);
+            console.log(`[Chat] Available events were:`, eventsForLLM.map(e => e.metadata.title));
+          }
         }
 
         // Cache the result if not already cached (fire and forget)

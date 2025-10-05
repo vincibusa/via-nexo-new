@@ -17,14 +17,14 @@ export async function GET(
         place:places(
           id,
           name,
-          category,
+          place_type,
           address,
           city,
-          latitude,
-          longitude,
+          lat,
+          lon,
           cover_image_url,
           price_range,
-          verified
+          verification_status
         )
       `)
       .eq('id', id)
@@ -51,11 +51,20 @@ export async function GET(
       ...event,
       // Map database column names to mobile-friendly names
       cover_image: event.cover_image_url,
-      ticket_url: event.ticket_link,
+      ticket_url: event.ticket_url,
+      music_genre: event.genre,
       // Format place data
       place: event.place ? {
-        ...event.place,
+        id: event.place.id,
+        name: event.place.name,
+        category: event.place.place_type,
+        address: event.place.address,
+        city: event.place.city,
+        latitude: event.place.lat,
+        longitude: event.place.lon,
         cover_image: event.place.cover_image_url,
+        price_range: event.place.price_range,
+        verified: event.place.verification_status === 'approved',
       } : null,
     };
 
