@@ -41,6 +41,31 @@ interface PlaceCandidate {
 }
 
 /**
+ * Event candidate with metadata
+ */
+interface EventCandidate {
+  id: string
+  title: string
+  description: string | null
+  event_type: string
+  start_datetime: string
+  end_datetime: string | null
+  genre: string[] | null
+  lineup: string[] | null
+  ticket_price_min: number | null
+  ticket_price_max: number | null
+  place: {
+    id: string
+    name: string
+    address: string
+    city: string
+    lat: number
+    lon: number
+  }
+  distance_km: number
+}
+
+/**
  * Suggestion result
  */
 export interface Suggestion {
@@ -443,6 +468,188 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
       },
     }
   }
+}
+
+/**
+ * EVENTS SEARCH FUNCTIONS
+ */
+
+/**
+ * Step A (Events): Geo Filter - Find events within radius using PostGIS
+ */
+export async function geoFilterEvents(
+  lat: number,
+  lon: number,
+  radiusKm: number = 5
+): Promise<string[]> {
+  const supabase = await createClient()
+
+  const radiusMeters = radiusKm * 1000
+
+  const { data, error } = await supabase.rpc('events_within_radius', {
+    center_lat: lat,
+    center_lon: lon,
+    radius_meters: radiusMeters,
+  })
+
+  if (error) {
+    console.error('Error in geo filter (events):', error)
+    return []
+  }
+
+  return (data || []).slice(0, 100).map((e: any) => e.id)
+}
+
+/**
+ * Step C (Events): Vector Search - Find similar events using pgvector
+ */
+export async function vectorSearchEvents(
+  queryEmbedding: number[],
+  candidateIds: string[],
+  topK: number = 12
+): Promise<Array<{ eventId: string; similarity: number }>> {
+  const supabase = await createClient()
+
+  if (candidateIds.length === 0) {
+    return []
+  }
+
+  const { data, error } = await supabase.rpc('match_event_embeddings', {
+    query_embedding: queryEmbedding,
+    candidate_ids: candidateIds,
+    match_threshold: 0.3,
+    match_count: topK,
+  })
+
+  if (error) {
+    console.error('[Vector Search Events] Error:', error)
+    return []
+  }
+
+  const results = (data || []).map((row: any) => ({
+    eventId: row.entity_id,
+    similarity: row.similarity,
+  }))
+
+  console.log(`[Vector Search Events] Found ${results.length} similar events`)
+  return results
+}
+
+/**
+ * Step D (Events): Re-Ranking - Apply event-specific business rules
+ */
+export async function reRankEvents(
+  topKIds: string[],
+  context: SuggestionContext
+): Promise<Array<{ eventId: string; score: number; metadata: EventCandidate }>> {
+  const supabase = await createClient()
+
+  if (topKIds.length === 0) {
+    return []
+  }
+
+  console.log(`[Re-rank Events] Fetching metadata for ${topKIds.length} event IDs`)
+
+  const { data: events, error } = await supabase
+    .from('events')
+    .select(`
+      id,
+      title,
+      description,
+      event_type,
+      start_datetime,
+      end_datetime,
+      genre,
+      lineup,
+      ticket_price_min,
+      ticket_price_max,
+      place:places!events_place_id_fkey(id, name, address, city, lat, lon)
+    `)
+    .in('id', topKIds)
+
+  if (error || !events) {
+    console.error('[Re-rank Events] Error fetching event metadata:', error)
+    return []
+  }
+
+  console.log(`[Re-rank Events] Fetched ${events.length} events from DB`)
+
+  const now = new Date()
+  const eventsWithScores = events.map((event: any) => {
+    let score = 1.0
+
+    // Calculate distance via place
+    const distance = calculateDistance(
+      context.location.lat,
+      context.location.lon,
+      event.place.lat,
+      event.place.lon
+    )
+
+    // Penalize by distance
+    if (distance > 3) {
+      score -= Math.min(0.3, (distance - 3) * 0.05)
+    }
+
+    // Time relevance: Boost events happening soon
+    const eventDate = new Date(event.start_datetime)
+    const daysUntilEvent = (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+
+    if (daysUntilEvent < 0) {
+      // Past event - heavily penalize
+      score -= 1.0
+    } else if (daysUntilEvent <= 7) {
+      // This week - boost
+      score += 0.3
+    } else if (daysUntilEvent <= 30) {
+      // This month - moderate boost
+      score += 0.15
+    }
+
+    // Time of day match
+    if (context.time && event.start_datetime) {
+      const eventHour = eventDate.getHours()
+      const timeMatches = {
+        morning: eventHour >= 6 && eventHour < 12,
+        afternoon: eventHour >= 12 && eventHour < 18,
+        evening: eventHour >= 18 && eventHour < 23,
+        night: eventHour >= 23 || eventHour < 6,
+      }
+      if (timeMatches[context.time]) {
+        score += 0.2
+      }
+    }
+
+    // Price match
+    if (context.budget && event.ticket_price_min !== null) {
+      const budgetRanges = { '€': 15, '€€': 30, '€€€': 60, '€€€€': 100 }
+      const maxBudget = budgetRanges[context.budget]
+      if (event.ticket_price_min <= maxBudget) {
+        score += 0.1
+      }
+    }
+
+    return {
+      eventId: event.id,
+      score: Math.max(0, score),
+      metadata: {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        event_type: event.event_type,
+        start_datetime: event.start_datetime,
+        end_datetime: event.end_datetime,
+        genre: event.genre,
+        lineup: event.lineup,
+        ticket_price_min: event.ticket_price_min,
+        ticket_price_max: event.ticket_price_max,
+        place: event.place,
+        distance_km: distance,
+      },
+    }
+  })
+
+  return eventsWithScores.sort((a, b) => b.score - a.score)
 }
 
 /**

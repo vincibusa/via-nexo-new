@@ -3,9 +3,12 @@ import { z } from 'zod'
 import { generateObject, streamObject } from 'ai'
 import {
   geoFilterPlaces,
+  geoFilterEvents,
   buildSemanticQuery,
   vectorSearch,
+  vectorSearchEvents,
   reRank,
+  reRankEvents,
   SuggestionContext,
 } from '@/lib/ai/rag-pipeline'
 import { generateEmbedding } from '@/lib/ai/embedding'
@@ -57,8 +60,9 @@ const chatSuggestionSchema = z.object({
   suggestions: z
     .array(
       z.object({
-        placeId: z.string().uuid(),
-        reason: z.string().max(200).describe('Spiega perché questo posto è perfetto per la loro richiesta'),
+        id: z.string().uuid(),
+        type: z.enum(['place', 'event']),
+        reason: z.string().max(200).describe('Spiega perché questo posto/evento è perfetto per la loro richiesta'),
         matchScore: z.number().min(0).max(1),
         confidence: z.enum(['high', 'medium', 'low']),
       })
@@ -67,6 +71,8 @@ const chatSuggestionSchema = z.object({
     .max(3),
   searchMetadata: z.object({
     totalCandidates: z.number(),
+    totalPlaces: z.number(),
+    totalEvents: z.number(),
     processingTime: z.number(),
     cacheUsed: z.boolean(),
   }),
@@ -179,24 +185,25 @@ export async function POST(request: NextRequest) {
       console.log(`[Chat] ❌ Cache MISS for key: ${cacheKey}`)
 
       // STEP 2: Run full RAG pipeline
-      // Step A: Geo filter
-      const candidateIds = await geoFilterPlaces(
-        context.location.lat,
-        context.location.lon,
-        context.radius_km || 5
-      )
-      console.log(`[Chat] Step A - Geo Filter: Found ${candidateIds.length} candidates`)
+      // Step A: Geo filter (parallel for places and events)
+      const [placeCandidateIds, eventCandidateIds] = await Promise.all([
+        geoFilterPlaces(context.location.lat, context.location.lon, context.radius_km || 5),
+        geoFilterEvents(context.location.lat, context.location.lon, context.radius_km || 5),
+      ])
+      console.log(`[Chat] Step A - Geo Filter: Found ${placeCandidateIds.length} places, ${eventCandidateIds.length} events`)
 
-      totalCandidates = candidateIds.length
+      totalCandidates = placeCandidateIds.length + eventCandidateIds.length
 
-      if (candidateIds.length === 0) {
+      if (placeCandidateIds.length === 0 && eventCandidateIds.length === 0) {
         console.log(`[Chat] ⚠️  No candidates found in geo filter`)
         return new Response(
           JSON.stringify({
-            conversationalResponse: 'Mi dispiace, non ho trovato nessun locale nella tua zona. Prova ad ampliare il raggio di ricerca! 📍',
+            conversationalResponse: 'Mi dispiace, non ho trovato nessun locale o evento nella tua zona. Prova ad ampliare il raggio di ricerca! 📍',
             suggestions: [],
             searchMetadata: {
               totalCandidates: 0,
+              totalPlaces: 0,
+              totalEvents: 0,
               processingTime: Date.now() - startTime,
               cacheUsed: false,
             },
@@ -216,18 +223,23 @@ export async function POST(request: NextRequest) {
       const queryEmbedding = await generateEmbedding(semanticQuery)
       console.log(`[Chat] Step B - Generated embedding with ${queryEmbedding.length} dimensions`)
 
-      // Step C: Vector search
-      const vectorResults = await vectorSearch(queryEmbedding, candidateIds, 12)
-      console.log(`[Chat] Step C - Vector Search: Found ${vectorResults.length} similar places`)
+      // Step C: Vector search (parallel for places and events)
+      const [placeVectorResults, eventVectorResults] = await Promise.all([
+        placeCandidateIds.length > 0 ? vectorSearch(queryEmbedding, placeCandidateIds, 8) : Promise.resolve([]),
+        eventCandidateIds.length > 0 ? vectorSearchEvents(queryEmbedding, eventCandidateIds, 8) : Promise.resolve([]),
+      ])
+      console.log(`[Chat] Step C - Vector Search: Found ${placeVectorResults.length} places, ${eventVectorResults.length} events`)
 
-      if (vectorResults.length === 0) {
+      if (placeVectorResults.length === 0 && eventVectorResults.length === 0) {
         console.log(`[Chat] ⚠️  No results from vector search`)
         return new Response(
           JSON.stringify({
             conversationalResponse: 'Hmm, non trovo nulla che corrisponda esattamente. Prova a descrivere cosa cerchi in modo diverso! 🤔',
             suggestions: [],
             searchMetadata: {
-              totalCandidates: candidateIds.length,
+              totalCandidates: totalCandidates,
+              totalPlaces: placeCandidateIds.length,
+              totalEvents: eventCandidateIds.length,
               processingTime: Date.now() - startTime,
               cacheUsed: false,
             },
@@ -240,15 +252,30 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Step D: Re-ranking
-      const topKIds = vectorResults.map((r) => r.placeId)
-      const reranked = await reRank(topKIds, context)
-      console.log(`[Chat] Step D - Re-ranking: ${reranked.length} places ranked`)
+      // Step D: Re-ranking (parallel for places and events)
+      const [rerankedPlaces, rerankedEvents] = await Promise.all([
+        placeVectorResults.length > 0
+          ? reRank(placeVectorResults.map((r) => r.placeId), context)
+          : Promise.resolve([]),
+        eventVectorResults.length > 0
+          ? reRankEvents(eventVectorResults.map((r) => r.eventId), context)
+          : Promise.resolve([]),
+      ])
+      console.log(`[Chat] Step D - Re-ranking: ${rerankedPlaces.length} places, ${rerankedEvents.length} events`)
 
-      topN = reranked.slice(0, 6)
-      console.log(`[Chat] Top 6 places for LLM:`)
-      topN.forEach((item, idx) => {
-        console.log(`  ${idx + 1}. ${item.metadata.name} (score: ${item.score.toFixed(2)}, distance: ${item.metadata.distance_km.toFixed(1)}km)`)
+      // Combine places and events (aim for ~4 places + ~2 events for LLM)
+      const topPlaces = rerankedPlaces.slice(0, 4)
+      const topEvents = rerankedEvents.slice(0, 2)
+
+      topN = [...topPlaces, ...topEvents]
+      console.log(`[Chat] Top results for LLM:`)
+      console.log(`  Places:`)
+      topPlaces.forEach((item, idx) => {
+        console.log(`    ${idx + 1}. ${item.metadata.name} (score: ${item.score.toFixed(2)}, distance: ${item.metadata.distance_km.toFixed(1)}km)`)
+      })
+      console.log(`  Events:`)
+      topEvents.forEach((item, idx) => {
+        console.log(`    ${idx + 1}. ${item.metadata.title} (score: ${item.score.toFixed(2)}, distance: ${item.metadata.distance_km.toFixed(1)}km)`)
       })
     }
 
@@ -262,24 +289,15 @@ export async function POST(request: NextRequest) {
     )
     const responsePrompt = fs.readFileSync(responsePromptPath, 'utf-8')
 
-    // Build user prompt for LLM
-    const userPrompt = `
-RICHIESTA ORIGINALE UTENTE:
-"${validatedInput.message}"
-
-PARAMETRI ESTRATTI:
-- Compagnia: ${extractedParams.companionship.join(', ') || 'Non specificato'}
-- Mood: ${extractedParams.mood.join(', ') || 'Non specificato'}
-- Budget: ${extractedParams.budget}
-- Quando: ${extractedParams.time}
-- Keyword: ${extractedParams.keywords.join(', ') || 'Nessuna'}
-
+    // Build user prompt for LLM with both places and events
+    const placesSection = topN.filter(item => 'name' in item.metadata).length > 0 ? `
 LOCALI DISPONIBILI (ordinati per rilevanza):
 ${topN
+  .filter(item => 'name' in item.metadata)
   .map(
     (item, idx) => `
-${idx + 1}. ${item.metadata.name} (ID: ${item.placeId})
-   - Tipo: ${item.metadata.place_type}
+${idx + 1}. ${item.metadata.name} (ID: ${item.placeId}, TIPO: place)
+   - Tipo locale: ${item.metadata.place_type}
    - Descrizione: ${item.metadata.description || 'N/A'}
    - Indirizzo: ${item.metadata.address}, ${item.metadata.city}
    - Distanza: ${item.metadata.distance_km?.toFixed(1) || 'N/A'} km
@@ -290,10 +308,46 @@ ${idx + 1}. ${item.metadata.name} (ID: ${item.placeId})
    - Match Score: ${item.score.toFixed(2)}
 `
   )
-  .join('\n')}
+  .join('\n')}` : '';
 
-Rispondi in modo amichevole alla richiesta dell'utente e seleziona da 1 a 3 locali dalla lista sopra che meglio corrispondono.
-Spiega brevemente perché ogni locale è perfetto per loro.
+    const eventsSection = topN.filter(item => 'title' in item.metadata).length > 0 ? `
+EVENTI DISPONIBILI (ordinati per rilevanza):
+${topN
+  .filter(item => 'title' in item.metadata)
+  .map(
+    (item, idx) => `
+${idx + 1}. ${item.metadata.title} (ID: ${item.eventId}, TIPO: event)
+   - Tipo evento: ${item.metadata.event_type}
+   - Descrizione: ${item.metadata.description || 'N/A'}
+   - Data/ora: ${new Date(item.metadata.start_datetime).toLocaleString('it-IT')}
+   - Locale: ${item.metadata.place.name}
+   - Indirizzo: ${item.metadata.place.address}, ${item.metadata.place.city}
+   - Distanza: ${item.metadata.distance_km?.toFixed(1) || 'N/A'} km
+   - Generi musicali: ${item.metadata.genre?.join(', ') || 'N/A'}
+   - Lineup: ${item.metadata.lineup?.join(', ') || 'N/A'}
+   - Prezzo: ${item.metadata.ticket_price_min ? `€${item.metadata.ticket_price_min}${item.metadata.ticket_price_max ? ` - €${item.metadata.ticket_price_max}` : ''}` : 'N/A'}
+   - Match Score: ${item.score.toFixed(2)}
+`
+  )
+  .join('\n')}` : '';
+
+    const userPrompt = `
+RICHIESTA ORIGINALE UTENTE:
+"${validatedInput.message}"
+
+PARAMETRI ESTRATTI:
+- Compagnia: ${extractedParams.companionship.join(', ') || 'Non specificato'}
+- Mood: ${extractedParams.mood.join(', ') || 'Non specificato'}
+- Budget: ${extractedParams.budget}
+- Quando: ${extractedParams.time}
+- Keyword: ${extractedParams.keywords.join(', ') || 'Nessuna'}
+${placesSection}
+${eventsSection}
+
+Rispondi in modo amichevole alla richiesta dell'utente e seleziona da 1 a 3 opzioni dalla lista sopra (locali e/o eventi) che meglio corrispondono.
+Puoi scegliere qualsiasi combinazione (es. 2 locali + 1 evento, 3 locali, 1 locale + 2 eventi, ecc.).
+Per ogni scelta, specifica l'ID esatto e il TIPO (place o event) come indicato nella lista.
+Spiega brevemente perché ogni opzione è perfetta per loro.
 `
 
     // Stream LLM Generation via AI Gateway
