@@ -45,7 +45,15 @@ export async function POST(
     const body = await request.json()
     const validatedInput = addMessageSchema.parse(body)
 
-    // Add message to conversation
+    // Get current message count for this conversation to determine order
+    const { count } = await supabase
+      .from('chat_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('conversation_id', conversationId)
+
+    const nextOrder = (count || 0) + 1
+
+    // Add message to conversation with sequential order
     const { data: message, error: messageError } = await supabase
       .from('chat_messages')
       .insert({
@@ -53,6 +61,7 @@ export async function POST(
         content: validatedInput.content,
         is_user: validatedInput.is_user,
         suggestions_data: validatedInput.suggestions_data,
+        message_order: nextOrder,
       })
       .select()
       .single()

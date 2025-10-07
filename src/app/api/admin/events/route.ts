@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { embedEvent } from '@/lib/jobs/embedding-job'
+import { notifyUsersAboutNewEvent } from '@/lib/notifications/event-notifications'
 
 export async function GET(request: NextRequest) {
   try {
@@ -194,6 +195,38 @@ export async function POST(request: NextRequest) {
       } catch (embedError) {
         console.error('Error embedding event:', embedError)
         // Continue anyway, don't fail the creation
+      }
+    }
+
+    // Send push notifications to nearby users if event is published and listed
+    if (event.is_published && event.is_listed && !event.is_cancelled) {
+      try {
+        // Fetch place info for notification
+        const { data: place } = await supabase
+          .from('places')
+          .select('name, lat, lon')
+          .eq('id', event.place_id)
+          .single()
+
+        if (place) {
+          console.log('[Admin Events] Sending notifications for event:', event.id)
+          const notificationResult = await notifyUsersAboutNewEvent(supabase, {
+            eventId: event.id,
+            eventTitle: event.title,
+            placeId: event.place_id,
+            placeName: place.name,
+            startDatetime: event.start_datetime,
+            latitude: place.lat,
+            longitude: place.lon,
+          })
+
+          console.log('[Admin Events] Notification result:', notificationResult)
+        } else {
+          console.warn('[Admin Events] Place not found, skipping notifications')
+        }
+      } catch (notifyError) {
+        console.error('[Admin Events] Error sending notifications:', notifyError)
+        // Don't fail the request if notifications fail
       }
     }
 

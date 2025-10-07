@@ -90,13 +90,14 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Failed to create conversation' }, { status: 500 })
     }
 
-    // Add initial message
+    // Add initial message with message_order = 1
     const { data: message, error: messageError } = await supabase
       .from('chat_messages')
       .insert({
         conversation_id: conversation.id,
         content: validatedInput.initial_message,
         is_user: true,
+        message_order: 1,
       })
       .select()
       .single()

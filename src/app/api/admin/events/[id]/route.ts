@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { embedEvent } from '@/lib/jobs/embedding-job'
+import { notifyUsersAboutNewEvent } from '@/lib/notifications/event-notifications'
 
 export async function GET(
   request: NextRequest,
@@ -103,6 +104,15 @@ export async function PATCH(
     // Get update data
     const body = await request.json()
 
+    // Get current event state to detect if publishing status changed
+    const { data: currentEvent } = await supabase
+      .from('events')
+      .select('is_published, is_listed, is_cancelled, place_id, title, start_datetime')
+      .eq('id', id)
+      .single()
+
+    const wasUnpublished = currentEvent && !currentEvent.is_published
+
     // Whitelist of fields that can be updated
     const allowedFields = [
       'title',
@@ -177,6 +187,39 @@ export async function PATCH(
           .from('events')
           .update({ embeddings_status: 'pending' })
           .eq('id', id)
+      }
+    }
+
+    // Send notifications if event was just published (went from unpublished to published)
+    const nowPublished = updates.is_published === true && wasUnpublished
+    if (nowPublished && event.is_listed && !event.is_cancelled) {
+      try {
+        // Fetch place info for notification
+        const { data: place } = await supabase
+          .from('places')
+          .select('name, lat, lon')
+          .eq('id', event.place_id)
+          .single()
+
+        if (place) {
+          console.log('[Admin Events PATCH] Sending notifications for newly published event:', event.id)
+          const notificationResult = await notifyUsersAboutNewEvent(supabase, {
+            eventId: event.id,
+            eventTitle: event.title,
+            placeId: event.place_id,
+            placeName: place.name,
+            startDatetime: event.start_datetime,
+            latitude: place.lat,
+            longitude: place.lon,
+          })
+
+          console.log('[Admin Events PATCH] Notification result:', notificationResult)
+        } else {
+          console.warn('[Admin Events PATCH] Place not found, skipping notifications')
+        }
+      } catch (notifyError) {
+        console.error('[Admin Events PATCH] Error sending notifications:', notifyError)
+        // Don't fail the request if notifications fail
       }
     }
 

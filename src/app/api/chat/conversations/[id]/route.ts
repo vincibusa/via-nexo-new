@@ -33,11 +33,12 @@ export async function GET(
       return Response.json({ error: 'Failed to fetch conversation' }, { status: 500 })
     }
 
-    // Fetch all messages for this conversation
+    // Fetch all messages for this conversation, ordered by message_order (then timestamp as fallback)
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
       .select('*')
       .eq('conversation_id', conversationId)
+      .order('message_order', { ascending: true, nullsFirst: false })
       .order('timestamp', { ascending: true })
 
     if (messagesError) {
