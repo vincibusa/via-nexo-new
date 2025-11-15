@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { generateObject, streamObject } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import {
   geoFilterPlaces,
   geoFilterEvents,
@@ -20,6 +21,206 @@ import path from 'path'
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30
 
+/**
+ * ENHANCED: Smart context management for optimal conversation flow
+ */
+function manageConversationContext(
+  history: Array<{ content: string; is_user: boolean; timestamp: string }>,
+  currentMessage: string
+): {
+  relevantHistory: Array<{ content: string; is_user: boolean; timestamp: string }>;
+  contextSummary: string;
+  isTopicChange: boolean;
+} {
+  if (history.length === 0) {
+    return { relevantHistory: [], contextSummary: "", isTopicChange: false }
+  }
+
+  // Simple topic change detection
+  const topicChangeKeywords = [
+    'invece', 'comunque', 'cambiamo argomento', 'altro', 'dimenticavo',
+    'diverso', 'altra cosa', 'ora', 'adesso'
+  ]
+  
+  const isTopicChange = topicChangeKeywords.some(keyword => 
+    currentMessage.toLowerCase().includes(keyword)
+  )
+
+  // If topic change detected, use shorter context window
+  const contextWindow = isTopicChange ? 3 : Math.min(8, history.length)
+  const relevantHistory = history.slice(-contextWindow)
+
+  // Create context summary if history is long
+  let contextSummary = ""
+  if (history.length > contextWindow) {
+    const olderMessages = history.slice(0, -contextWindow)
+    const userRequests = olderMessages
+      .filter(msg => msg.is_user)
+      .map(msg => msg.content)
+      .slice(-3) // Last 3 older user requests
+    
+    if (userRequests.length > 0) {
+      contextSummary = `
+[CONTESTO PRECEDENTE: L'utente ha chiesto in passato di: "${userRequests.join('", "')}"]
+`
+    }
+  }
+
+  return { relevantHistory, contextSummary, isTopicChange }
+}
+
+/**
+ * ENHANCED: Retrieve conversation history for context-aware responses
+ */
+async function getConversationHistory(
+  supabase: any,
+  conversationId: string,
+  userId: string,
+  limit: number = 12 // Slightly higher to allow for context management
+): Promise<Array<{ content: string; is_user: boolean; timestamp: string }>> {
+  try {
+    // Verify user owns this conversation
+    const { data: conversation } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .eq('user_id', userId)
+      .single()
+
+    if (!conversation) {
+      console.warn(`[Chat History] Conversation ${conversationId} not found for user ${userId}`)
+      return []
+    }
+
+    // Get recent messages from the conversation
+    const { data: messages, error } = await supabase
+      .from('chat_messages')
+      .select('content, is_user, timestamp')
+      .eq('conversation_id', conversationId)
+      .order('message_order', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('[Chat History] Error fetching messages:', error)
+      return []
+    }
+
+    // Return messages in chronological order (oldest first)
+    return (messages || []).reverse()
+  } catch (error) {
+    console.error('[Chat History] Error in getConversationHistory:', error)
+    return []
+  }
+}
+
+/**
+ * ENHANCED: Build conversation context for LLM
+ */
+function buildConversationContext(history: Array<{ content: string; is_user: boolean; timestamp: string }>): string {
+  if (history.length === 0) {
+    return ""
+  }
+
+  const contextLines = history.map(msg => {
+    const speaker = msg.is_user ? "Utente" : "Assistente"
+    return `${speaker}: "${msg.content}"`
+  })
+
+  return `
+CRONOLOGIA CONVERSAZIONE:
+${contextLines.join('\n')}
+
+---
+`
+}
+
+/**
+ * ENHANCED: Extract user preferences from conversation history
+ */
+function extractUserPreferences(history: Array<{ content: string; is_user: boolean; timestamp: string }>): {
+  preferredBudget?: string;
+  preferredMood?: string[];
+  preferredCompanionship?: string[];
+  preferredTime?: string;
+  commonKeywords?: string[];
+} {
+  if (history.length === 0) {
+    return {}
+  }
+
+  const userMessages = history.filter(msg => msg.is_user).map(msg => msg.content.toLowerCase())
+  
+  // Simple preference extraction (can be enhanced with NLP)
+  const preferences: any = {}
+  
+  // Budget patterns
+  if (userMessages.some(msg => msg.includes('economico') || msg.includes('cheap') || msg.includes('€'))) {
+    preferences.preferredBudget = '€'
+  } else if (userMessages.some(msg => msg.includes('costoso') || msg.includes('lusso') || msg.includes('€€€€'))) {
+    preferences.preferredBudget = '€€€€'
+  }
+  
+  // Mood patterns
+  const moodKeywords = []
+  if (userMessages.some(msg => msg.includes('romantico') || msg.includes('intimo'))) {
+    moodKeywords.push('romantic')
+  }
+  if (userMessages.some(msg => msg.includes('energico') || msg.includes('ballare') || msg.includes('festa'))) {
+    moodKeywords.push('energetic')
+  }
+  if (userMessages.some(msg => msg.includes('tranquillo') || msg.includes('rilassant'))) {
+    moodKeywords.push('relaxed')
+  }
+  if (moodKeywords.length > 0) {
+    preferences.preferredMood = moodKeywords
+  }
+  
+  // Companionship patterns
+  const companionshipKeywords = []
+  if (userMessages.some(msg => msg.includes('famiglia'))) {
+    companionshipKeywords.push('family')
+  }
+  if (userMessages.some(msg => msg.includes('amici') || msg.includes('gruppo'))) {
+    companionshipKeywords.push('friends')
+  }
+  if (userMessages.some(msg => msg.includes('partner') || msg.includes('ragazza') || msg.includes('ragazzo'))) {
+    companionshipKeywords.push('partner')
+  }
+  if (companionshipKeywords.length > 0) {
+    preferences.preferredCompanionship = companionshipKeywords
+  }
+
+  return preferences
+}
+
+/**
+ * ENHANCED: Apply user preferences to context when parameters are missing
+ */
+function enhanceContextWithPreferences(
+  context: any, 
+  preferences: any
+): any {
+  const enhancedContext = { ...context }
+  
+  // Apply preferences only if current context doesn't specify them
+  if (!enhancedContext.budget && preferences.preferredBudget) {
+    enhancedContext.budget = preferences.preferredBudget
+    console.log(`[Preferences] Applied preferred budget: ${preferences.preferredBudget}`)
+  }
+  
+  if (!enhancedContext.mood && preferences.preferredMood && preferences.preferredMood.length > 0) {
+    enhancedContext.mood = preferences.preferredMood[0]
+    console.log(`[Preferences] Applied preferred mood: ${preferences.preferredMood[0]}`)
+  }
+  
+  if (!enhancedContext.companionship && preferences.preferredCompanionship && preferences.preferredCompanionship.length > 0) {
+    enhancedContext.companionship = preferences.preferredCompanionship[0]
+    console.log(`[Preferences] Applied preferred companionship: ${preferences.preferredCompanionship[0]}`)
+  }
+
+  return enhancedContext
+}
+
 // Helper: Create cache key from context
 function createCacheKey(context: SuggestionContext): string {
   const data = JSON.stringify({
@@ -35,7 +236,7 @@ function createCacheKey(context: SuggestionContext): string {
   return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16)
 }
 
-// Input validation schema - accepts natural language message
+// Input validation schema - accepts natural language message with optional conversation context
 const chatRequestSchema = z.object({
   message: z.string().min(1).max(500),
   location: z.object({
@@ -43,6 +244,7 @@ const chatRequestSchema = z.object({
     lon: z.number().min(-180).max(180),
   }),
   radius_km: z.number().min(0.5).max(50).optional().default(5),
+  conversation_id: z.string().uuid().optional(), // ENHANCED: Optional conversation context
 })
 
 // Parameter extraction schema
@@ -62,8 +264,8 @@ const chatSuggestionSchema = z.object({
       z.object({
         id: z.string().uuid(),
         type: z.enum(['place', 'event']),
-        reason: z.string().max(200).describe('Spiega perché questo posto/evento è perfetto per la loro richiesta'),
-        matchScore: z.number().min(0).max(1),
+        reason: z.string().max(300).describe('Spiega perché questo posto/evento è perfetto per la loro richiesta'),
+        matchScore: z.number().min(0).max(2),
         confidence: z.enum(['high', 'medium', 'low']),
       })
     )
@@ -89,6 +291,38 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now()
 
     console.log(`[Chat] User message: "${validatedInput.message}"`)
+    
+    // Get current user for conversation history
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // ENHANCED: Retrieve and manage conversation history if conversation_id provided
+    let conversationHistory: Array<{ content: string; is_user: boolean; timestamp: string }> = []
+    let conversationContext = ""
+    let contextSummary = ""
+    let isTopicChange = false
+    
+    if (validatedInput.conversation_id && user) {
+      console.log(`[Chat] Retrieving history for conversation: ${validatedInput.conversation_id}`)
+      const fullHistory = await getConversationHistory(
+        supabase,
+        validatedInput.conversation_id,
+        user.id,
+        12 // Get more messages for smart context management
+      )
+      
+      // Apply smart context management
+      const contextManagement = manageConversationContext(fullHistory, validatedInput.message)
+      conversationHistory = contextManagement.relevantHistory
+      contextSummary = contextManagement.contextSummary
+      isTopicChange = contextManagement.isTopicChange
+      
+      conversationContext = buildConversationContext(conversationHistory) + contextSummary
+      
+      console.log(`[Chat] Retrieved ${fullHistory.length} total messages, using ${conversationHistory.length} for context`)
+      if (isTopicChange) {
+        console.log(`[Chat] 🔄 Topic change detected, using shorter context window`)
+      }
+    }
 
     // Load extraction system prompt
     const extractionPromptPath = path.join(
@@ -97,19 +331,34 @@ export async function POST(request: NextRequest) {
     )
     const extractionPrompt = fs.readFileSync(extractionPromptPath, 'utf-8')
 
-    // STEP 1: Extract structured parameters from natural language
+    // STEP 1: Extract structured parameters from natural language with conversation context
     console.log(`[Chat] Step 1 - Extracting parameters...`)
+    
+    // ENHANCED: Include conversation context in parameter extraction
+    const contextualPrompt = conversationContext + 
+      `NUOVO MESSAGGIO UTENTE: "${validatedInput.message}"
+      
+Analizza il nuovo messaggio dell'utente tenendo conto della cronologia della conversazione sopra. 
+Se il messaggio fa riferimento a richieste precedenti (es. "qualcosa di più economico", "di diverso", "simile"), 
+usa il contesto per comprendere meglio l'intenzione.`
+
     const { object: extractedParams } = await generateObject({
-      model: 'openai/gpt-5-mini',
+      model: openai('gpt-4.1-mini'), // FIX: No reasoning tokens per velocità
       schema: extractedParamsSchema,
       system: extractionPrompt,
-      prompt: validatedInput.message,
+      prompt: conversationContext ? contextualPrompt : validatedInput.message,
     })
 
     console.log(`[Chat] ✅ Extracted params:`, extractedParams)
 
+    // ENHANCED: Extract user preferences from conversation history
+    const userPreferences = extractUserPreferences(conversationHistory)
+    if (Object.keys(userPreferences).length > 0) {
+      console.log(`[Chat] 🧠 Extracted preferences:`, userPreferences)
+    }
+
     // Convert extracted params to SuggestionContext
-    const context: SuggestionContext = {
+    let context: SuggestionContext = {
       companionship: extractedParams.companionship[0], // Take first value
       mood: extractedParams.mood[0], // Take first value
       budget: extractedParams.budget,
@@ -120,6 +369,9 @@ export async function POST(request: NextRequest) {
       radius_km: validatedInput.radius_km,
       preferences: extractedParams.keywords.length > 0 ? extractedParams.keywords : undefined,
     }
+
+    // ENHANCED: Apply user preferences to fill in missing parameters
+    context = enhanceContextWithPreferences(context, userPreferences)
 
     // Check Supabase cache first (L2 cache)
     const cacheKey = createCacheKey(context)
@@ -334,8 +586,11 @@ ${idx + 1}. ${item.metadata.title} (ID: ${item.eventId}, TIPO: event)
   )
   .join('\n')}` : '';
 
-    const userPrompt = `
-RICHIESTA ORIGINALE UTENTE:
+    // ENHANCED: Include conversation context in final response generation
+    const contextSection = conversationContext ? `${conversationContext}` : ''
+    
+    const userPrompt = `${contextSection}
+RICHIESTA CORRENTE UTENTE:
 "${validatedInput.message}"
 
 PARAMETRI ESTRATTI:
@@ -347,15 +602,19 @@ PARAMETRI ESTRATTI:
 ${placesSection}
 ${eventsSection}
 
+${conversationContext ? 
+  'IMPORTANTE: Considera la cronologia della conversazione sopra. Se l\'utente fa riferimenti ("come l\'altro giorno", "qualcosa di diverso", "più economico") usa il contesto per dare una risposta pertinente e naturale.' : 
+  'Questa è una nuova conversazione.'}
+
 Rispondi in modo amichevole alla richiesta dell'utente e seleziona da 1 a 3 opzioni dalla lista sopra (locali e/o eventi) che meglio corrispondono.
 Puoi scegliere qualsiasi combinazione (es. 2 locali + 1 evento, 3 locali, 1 locale + 2 eventi, ecc.).
 Per ogni scelta, specifica l'ID esatto e il TIPO (place o event) come indicato nella lista.
-Spiega brevemente perché ogni opzione è perfetta per loro.
+Spiega brevemente perché ogni opzione è perfetta per loro, tenendo conto del contesto conversazionale se presente.
 `
 
-    // Stream LLM Generation via AI Gateway
+    // Stream LLM Generation with OpenAI
     const result = streamObject({
-      model: 'openai/gpt-5-mini',
+      model: openai('gpt-4.1-mini'), // FIX: No reasoning tokens per velocità
       schema: chatSuggestionSchema,
       system: responsePrompt,
       prompt: userPrompt,

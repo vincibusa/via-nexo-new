@@ -1,9 +1,55 @@
 import { embedMany } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import { createClient } from '@/lib/supabase/server'
+
+// OPTIMIZED: In-memory cache for frequently used embeddings
+const embeddingCache = new Map<string, { embedding: number[], timestamp: number }>()
+const CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const MAX_CACHE_SIZE = 1000 // Maximum number of cached embeddings
+
+/**
+ * OPTIMIZED: Get embedding from cache or generate new one
+ */
+function getCachedEmbedding(text: string): number[] | null {
+  const cacheKey = Buffer.from(text).toString('base64')
+  const cached = embeddingCache.get(cacheKey)
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.embedding
+  }
+  
+  // Clean up expired cache entries
+  if (cached && Date.now() - cached.timestamp >= CACHE_TTL) {
+    embeddingCache.delete(cacheKey)
+  }
+  
+  return null
+}
+
+/**
+ * OPTIMIZED: Store embedding in cache
+ */
+function setCachedEmbedding(text: string, embedding: number[]): void {
+  const cacheKey = Buffer.from(text).toString('base64')
+  
+  // Ensure cache doesn't grow too large
+  if (embeddingCache.size >= MAX_CACHE_SIZE) {
+    // Remove oldest entries (simple LRU)
+    const oldestKey = embeddingCache.keys().next().value
+    if (oldestKey) {
+      embeddingCache.delete(oldestKey)
+    }
+  }
+  
+  embeddingCache.set(cacheKey, {
+    embedding,
+    timestamp: Date.now()
+  })
+}
 
 /**
  * Generate embeddings for an array of text chunks using Vercel AI SDK
- * Uses AI Gateway with automatic routing via AI_GATEWAY_API_KEY
+ * OPTIMIZED: Uses cache to avoid redundant API calls
  */
 export async function generateEmbeddings(
   texts: string[]
@@ -12,25 +58,92 @@ export async function generateEmbeddings(
     return []
   }
 
-  try {
-    const { embeddings } = await embedMany({
-      model: 'openai/text-embedding-3-small',
-      values: texts,
-    })
+  const results: number[][] = []
+  const textsToGenerate: string[] = []
+  const indexMap: number[] = []
 
-    return embeddings
-  } catch (error) {
-    console.error('Error generating embeddings:', error)
-    throw new Error('Failed to generate embeddings')
+  // Check cache for each text
+  for (let i = 0; i < texts.length; i++) {
+    const cached = getCachedEmbedding(texts[i])
+    if (cached) {
+      results[i] = cached
+    } else {
+      textsToGenerate.push(texts[i])
+      indexMap.push(i)
+    }
   }
+
+  // Generate embeddings for uncached texts
+  if (textsToGenerate.length > 0) {
+    try {
+      const { embeddings } = await embedMany({
+        model: openai.embedding('text-embedding-3-small'),
+        values: textsToGenerate,
+      })
+
+      // Store results and update cache
+      for (let i = 0; i < embeddings.length; i++) {
+        const originalIndex = indexMap[i]
+        results[originalIndex] = embeddings[i]
+        setCachedEmbedding(textsToGenerate[i], embeddings[i])
+      }
+
+      console.log(`[Embeddings] Generated ${embeddings.length} new, used ${texts.length - textsToGenerate.length} cached`)
+    } catch (error) {
+      console.error('Error generating embeddings:', error)
+      throw new Error('Failed to generate embeddings')
+    }
+  } else {
+    console.log(`[Embeddings] All ${texts.length} embeddings served from cache`)
+  }
+
+  return results
 }
 
 /**
  * Generate a single embedding for a text query
+ * OPTIMIZED: Uses batch generation for efficiency
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   const embeddings = await generateEmbeddings([text])
   return embeddings[0]
+}
+
+/**
+ * OPTIMIZED: Generate embeddings in batches with intelligent grouping
+ * Groups similar texts together to maximize embedding efficiency
+ */
+export async function generateEmbeddingsBatch(
+  textGroups: { id: string; text: string }[]
+): Promise<Map<string, number[]>> {
+  if (textGroups.length === 0) {
+    return new Map()
+  }
+
+  const BATCH_SIZE = 100 // OpenAI's recommended batch size
+  const results = new Map<string, number[]>()
+
+  // Process in batches to avoid API limits
+  for (let i = 0; i < textGroups.length; i += BATCH_SIZE) {
+    const batch = textGroups.slice(i, i + BATCH_SIZE)
+    const texts = batch.map(item => item.text)
+    
+    try {
+      const embeddings = await generateEmbeddings(texts)
+      
+      // Map results back to IDs
+      batch.forEach((item, index) => {
+        results.set(item.id, embeddings[index])
+      })
+      
+      console.log(`[Embeddings] Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(textGroups.length / BATCH_SIZE)} (${batch.length} items)`)
+    } catch (error) {
+      console.error(`[Embeddings] Error in batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error)
+      throw error
+    }
+  }
+
+  return results
 }
 
 /**

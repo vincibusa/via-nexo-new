@@ -60,8 +60,8 @@ const suggestionSchema = z.object({
       z.object({
         id: z.string().uuid(),
         type: z.enum(['place', 'event']),
-        reason: z.string().max(200),
-        matchScore: z.number().min(0).max(1),
+        reason: z.string().max(300),
+        matchScore: z.number().min(0).max(2),
         confidence: z.enum(['high', 'medium', 'low']),
       })
     )
@@ -278,10 +278,10 @@ Per ogni scelta, specifica l'ID esatto e il TIPO (place o event) come indicato n
 `
 
     // Step E: Stream LLM Generation via AI Gateway
-    console.log(`[RAG] Step E - Starting LLM generation with gpt-5-mini...`)
+    console.log(`[RAG] Step E - Starting LLM generation with gpt-4.1-mini (NO reasoning)...`)
 
     const result = streamObject({
-      model: 'openai/gpt-5-mini', // Gateway routes automatically (reasoning model, no temperature)
+      model: 'openai/gpt-4.1-mini', // FIX: No reasoning tokens per max velocità
       schema: suggestionSchema,
       system: systemPrompt,
       prompt: userPrompt,
