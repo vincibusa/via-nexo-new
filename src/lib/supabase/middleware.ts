@@ -76,18 +76,25 @@ export async function updateSession(request: NextRequest) {
         }
 
         // Log admin access (non-blocking, fire and forget)
-        supabase.from('audit_logs').insert({
-          actor_id: user.id,
-          action: 'ACCESS_ADMIN_PANEL',
-          entity_type: 'route',
-          entity_id: null,
-          changes: { path: request.nextUrl.pathname },
-          ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-          user_agent: request.headers.get('user-agent') || 'unknown',
-        }).catch((err) => {
-          console.error('[Middleware] Audit log error:', err.message)
-          // Don't block request if audit log fails
-        })
+        ;(async () => {
+          try {
+            const { error } = await supabase.from('audit_logs').insert({
+              actor_id: user.id,
+              action: 'ACCESS_ADMIN_PANEL',
+              entity_type: 'route',
+              entity_id: null,
+              changes: { path: request.nextUrl.pathname },
+              ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+              user_agent: request.headers.get('user-agent') || 'unknown',
+            })
+            if (error) {
+              console.error('[Middleware] Audit log error:', error.message)
+            }
+          } catch (err) {
+            console.error('[Middleware] Audit log error:', err instanceof Error ? err.message : String(err))
+            // Don't block request if audit log fails
+          }
+        })()
       } catch (error) {
         console.error('[Middleware] Admin route protection error:', error)
         // On error, deny access to be safe
