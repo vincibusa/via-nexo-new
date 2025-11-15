@@ -1,7 +1,21 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { handleCorsPreflight, withCors } from '@/lib/cors';
+
+export async function OPTIONS(request: NextRequest) {
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+  return new Response(null, { status: 204 })
+}
 
 export async function GET(request: NextRequest) {
+  // Handle CORS preflight
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
@@ -93,11 +107,17 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching places:', error);
-      return NextResponse.json({ error: 'Failed to fetch places' }, { status: 500 });
+      return withCors(
+        request,
+        NextResponse.json({ error: 'Failed to fetch places' }, { status: 500 })
+      )
     }
 
     if (!places) {
-      return NextResponse.json({ data: [], nextCursor: null, hasMore: false, total: 0 });
+      return withCors(
+        request,
+        NextResponse.json({ data: [], nextCursor: null, hasMore: false, total: 0 })
+      )
     }
 
     // Determine if there are more results
@@ -172,15 +192,21 @@ export async function GET(request: NextRequest) {
       processedResults.sort((a: any, b: any) => a.name.localeCompare(b.name));
     }
 
-    return NextResponse.json({
-      data: processedResults,
-      nextCursor,
-      hasMore,
-      total: count || 0,
-    });
+    return withCors(
+      request,
+      NextResponse.json({
+        data: processedResults,
+        nextCursor,
+        hasMore,
+        total: count || 0,
+      })
+    )
   } catch (error) {
     console.error('Unexpected error fetching places:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return withCors(
+      request,
+      NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    )
   }
 }
 

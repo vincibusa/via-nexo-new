@@ -14,6 +14,7 @@ import {
 } from '@/lib/ai/rag-pipeline'
 import { generateEmbedding } from '@/lib/ai/embedding'
 import { createClient } from '@/lib/supabase/server'
+import { handleCorsPreflight, getCorsHeaders } from '@/lib/cors'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -326,11 +327,31 @@ const chatSuggestionSchema = z.object({
   }),
 })
 
+export async function OPTIONS(request: NextRequest) {
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+  return new Response(null, { status: 204 })
+}
+
 export async function POST(request: NextRequest) {
+  // Handle CORS preflight
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+  
   return handleChatSuggestStream(request)
 }
 
 export async function GET(request: NextRequest) {
+  // Handle CORS preflight
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+  
   return handleChatSuggestStream(request)
 }
 
@@ -1013,21 +1034,24 @@ ISTRUZIONI CRITICHE:
     },
   })
 
+    const corsHeaders = getCorsHeaders(request)
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        ...corsHeaders,
       },
     })
   } catch (error) {
     console.error('Error setting up stream:', error)
+    const corsHeaders = getCorsHeaders(request)
     return Response.json(
       { error: error instanceof Error ? error.message : 'Internal server error' }, 
-      { status: 500 }
+      { 
+        status: 500,
+        headers: corsHeaders,
+      }
     )
   }
 }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { runRAGPipeline, SuggestionContext } from '@/lib/ai/rag-pipeline'
 import { logSuggestion } from '@/lib/ai/suggestion-logging'
 import { createClient } from '@/lib/supabase/server'
+import { handleCorsPreflight, withCors } from '@/lib/cors'
 
 // Input validation schema
 const suggestionRequestSchema = z.object({
@@ -23,7 +24,21 @@ const suggestionRequestSchema = z.object({
   datetime: z.string().datetime().optional(),
 })
 
+export async function OPTIONS(request: NextRequest) {
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+  return new Response(null, { status: 204 })
+}
+
 export async function POST(request: NextRequest) {
+  // Handle CORS preflight
+  const preflightResponse = handleCorsPreflight(request)
+  if (preflightResponse) {
+    return preflightResponse
+  }
+
   try {
     // Parse and validate input
     const body = await request.json()
@@ -59,27 +74,36 @@ export async function POST(request: NextRequest) {
     )
 
     // Return result with log ID
-    return NextResponse.json({
-      ...result,
-      logId,
-    })
+    return withCors(
+      request,
+      NextResponse.json({
+        ...result,
+        logId,
+      })
+    )
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          error: 'Invalid input',
-          details: error.issues,
-        },
-        { status: 400 }
+      return withCors(
+        request,
+        NextResponse.json(
+          {
+            error: 'Invalid input',
+            details: error.issues,
+          },
+          { status: 400 }
+        )
       )
     }
 
     console.error('Error in suggest API:', error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Internal server error',
-      },
-      { status: 500 }
+    return withCors(
+      request,
+      NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : 'Internal server error',
+        },
+        { status: 500 }
+      )
     )
   }
 }
