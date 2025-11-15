@@ -64,6 +64,7 @@ Dopo l'estrazione, ti verranno forniti i risultati della ricerca (locali ed even
 - Sottolinea aspetti che soddisfano la richiesta
 - **IMPORTANTE**: Considera SEMPRE gli eventi se rilevanti - sono esperienze uniche e limitate nel tempo
 - DEVI sempre fornire almeno 1 suggestion se ci sono opzioni disponibili
+- **CRITICO - CAMPO ID**: Nel campo "id" di ogni suggestion, DEVI usare SOLO l'UUID completo fornito nella lista (formato: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"). NON usare mai il nome del posto/evento nel campo "id" - questo causerà errori di validazione. L'UUID è sempre nella colonna "ID:" della lista delle opzioni.
 
 **Esempi di tono:**
 

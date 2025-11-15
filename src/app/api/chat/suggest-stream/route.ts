@@ -771,24 +771,30 @@ Usa SOLO questi tre valori esatti, senza caratteri speciali.`,
         console.log(`[DEBUG] Events for LLM:`, eventsForLLM.map(e => ({ id: e.eventId, title: e.metadata.title })));
         
         // OTTIMIZZAZIONE: Prompt ultra-compatto - Ridotto del 60% rispetto alla versione precedente
+        // IMPORTANTE: Formato UUID-first per evitare che l'LLM usi i nomi invece degli UUID
         const placesSection = placesForLLM.length > 0 ? 
           placesForLLM.map((item, idx) => 
-            `${idx + 1}. ${item.metadata.name} (${item.placeId}) - ${item.metadata.place_type}, ${item.metadata.city}, score:${item.score.toFixed(1)}`
+            `${idx + 1}. ID:${item.placeId} | Nome:"${item.metadata.name}" | Tipo:${item.metadata.place_type} | Città:${item.metadata.city} | Score:${item.score.toFixed(1)}`
           ).join('\n') : '';
 
         const eventsSection = eventsForLLM.length > 0 ? 
           eventsForLLM.map((item, idx) => 
-            `${idx + placesForLLM.length + 1}. ${item.metadata.title} (${item.eventId}) - ${item.metadata.event_type}, ${item.metadata.place.city}, score:${item.score.toFixed(1)}`
+            `${idx + placesForLLM.length + 1}. ID:${item.eventId} | Nome:"${item.metadata.title}" | Tipo:${item.metadata.event_type} | Città:${item.metadata.place.city} | Score:${item.score.toFixed(1)}`
           ).join('\n') : '';
 
         const optionsList = [placesSection, eventsSection].filter(s => s).join('\n')
         
         const unifiedUserPrompt = `MSG: "${validatedInput.message}"
-OPZIONI:\n${optionsList}
+OPZIONI DISPONIBILI:
+${optionsList}
 
-ESTRAI: companionship[], mood[], budget(€/€€/€€€), time, keywords[].
-RISPONDI: conversationalResponse(max150char), suggestions(1-3 dalla lista), searchMetadata.
-USA SOLO gli ID dalla lista sopra.`
+ISTRUZIONI CRITICHE:
+- ESTRAI: companionship[], mood[], budget(€/€€/€€€), time, keywords[].
+- RISPONDI: conversationalResponse(max150char), suggestions(1-3 dalla lista), searchMetadata.
+- ⚠️ OBBLIGATORIO: Nel campo "id" di ogni suggestion, usa SOLO l'UUID completo (es: "a89487c5-01af-4882-abe5-9cf7b7726b68").
+- ❌ NON usare mai il nome nel campo "id" - solo l'UUID dalla colonna "ID:" sopra.
+- ✅ Esempio corretto: {"id": "a89487c5-01af-4882-abe5-9cf7b7726b68", "type": "place", ...}
+- ❌ Esempio ERRATO: {"id": "Caffè del Kassaro", "type": "place", ...}`
         // OTTIMIZZAZIONE: UNIFIED LLM Call - Nessuna doppia latenza!
         console.log(`[DEBUG] Starting UNIFIED LLM generation...`)
         console.log(`[DEBUG] ULTRA-COMPACT prompt length:`, unifiedUserPrompt.length)
@@ -813,9 +819,58 @@ USA SOLO gli ID dalla lista sopra.`
             console.log(`[DEBUG] Full unified object:`, JSON.stringify(object, null, 2))
             console.log(`[DEBUG] LLM generation error:`, error)
             
+            // FIX: Crea mappa nome->UUID per correzione automatica
+            const nameToUuidMap = new Map<string, string>()
+            placesForLLM.forEach(item => {
+              nameToUuidMap.set(item.metadata.name.toLowerCase().trim(), item.placeId)
+            })
+            eventsForLLM.forEach(item => {
+              nameToUuidMap.set(item.metadata.title.toLowerCase().trim(), item.eventId)
+            })
+            
             if (error) {
               console.error(`[DEBUG] Unified LLM had error:`, error)
               console.error(`[DEBUG] Error details:`, typeof error === 'object' && error && 'stack' in error ? error.stack : 'No stack trace')
+              
+              // FIX: Prova a estrarre e correggere il JSON dall'errore
+              if (error && typeof error === 'object' && 'text' in error && typeof error.text === 'string') {
+                try {
+                  const rawJson = JSON.parse(error.text)
+                  console.log(`[DEBUG] Extracted JSON from error, attempting to fix invalid IDs...`)
+                  
+                  // Corregge gli ID non validi
+                  if (rawJson.suggestions && Array.isArray(rawJson.suggestions)) {
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+                    let corrected = false
+                    rawJson.suggestions = rawJson.suggestions.map((suggestion: any) => {
+                      if (suggestion.id && !uuidRegex.test(suggestion.id)) {
+                        const normalizedName = suggestion.id.toLowerCase().trim()
+                        const correctUuid = nameToUuidMap.get(normalizedName)
+                        if (correctUuid) {
+                          console.warn(`[DEBUG] Fixed invalid ID from error: "${suggestion.id}" -> "${correctUuid}"`)
+                          corrected = true
+                          return { ...suggestion, id: correctUuid }
+                        }
+                      }
+                      return suggestion
+                    })
+                    
+                    if (corrected) {
+                      // Valida manualmente dopo la correzione
+                      const validationResult = unifiedSuggestionSchema.safeParse(rawJson)
+                      if (validationResult.success) {
+                        console.log(`[DEBUG] ✅ Successfully corrected and validated object from error`)
+                        object = validationResult.data
+                        error = null // Clear error since we fixed it
+                      } else {
+                        console.error(`[DEBUG] ❌ Validation still failed after correction:`, validationResult.error)
+                      }
+                    }
+                  }
+                } catch (parseError) {
+                  console.error(`[DEBUG] Failed to parse JSON from error:`, parseError)
+                }
+              }
             }
             
             if (!object) {
@@ -849,6 +904,30 @@ USA SOLO gli ID dalla lista sopra.`
               console.warn(`[DEBUG] Object keys:`, Object.keys(object || {}))
               console.warn(`[DEBUG] Suggestions value:`, object?.suggestions)
               console.warn(`[DEBUG] Extracted params:`, object?.extractedParams)
+            } else if (object?.suggestions) {
+              // FIX: Post-processing backup per correggere ID non validi (nel caso passino la validazione)
+              // Usa la mappa già creata sopra
+              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+              let corrected = false
+              object.suggestions = object.suggestions.map((suggestion: any) => {
+                if (suggestion.id && !uuidRegex.test(suggestion.id)) {
+                  // Non è un UUID, prova a mapparlo dal nome
+                  const normalizedName = suggestion.id.toLowerCase().trim()
+                  const correctUuid = nameToUuidMap.get(normalizedName)
+                  if (correctUuid) {
+                    console.warn(`[DEBUG] Fixed invalid ID in post-processing: "${suggestion.id}" -> "${correctUuid}"`)
+                    corrected = true
+                    return { ...suggestion, id: correctUuid }
+                  } else {
+                    console.error(`[DEBUG] Cannot map invalid ID to UUID: "${suggestion.id}"`)
+                  }
+                }
+                return suggestion
+              })
+              
+              if (corrected) {
+                console.log(`[DEBUG] ✅ Corrected invalid IDs in post-processing`)
+              }
             }
             
             console.log(`[Chat Stream] Final suggestions count: ${object?.suggestions?.length || 0}`)
