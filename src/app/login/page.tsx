@@ -84,7 +84,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -93,7 +93,7 @@ export default function LoginPage() {
               {loading ? 'Accesso in corso...' : 'Accedi'}
             </Button>
 
-            <div className="mt-4 rounded-md bg-blue-50 p-3 text-xs text-blue-800">
+            <div className="mt-4 rounded-md bg-blue-500/10 border border-blue-500/20 p-3 text-xs text-blue-700 dark:text-blue-300">
               ℹ️ Questo pannello è riservato ad amministratori e manager.
               Per richiedere accesso come manager, contatta un amministratore.
             </div>

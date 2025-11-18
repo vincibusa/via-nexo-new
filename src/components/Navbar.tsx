@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { LogOut, User, Settings } from 'lucide-react'
 
 export function Navbar() {
@@ -38,11 +39,11 @@ export function Navbar() {
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-red-500 hover:bg-red-600'
+        return 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'
       case 'manager':
-        return 'bg-blue-500 hover:bg-blue-600'
+        return 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'
       default:
-        return 'bg-gray-500 hover:bg-gray-600'
+        return 'bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-700'
     }
   }
 
@@ -95,6 +96,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

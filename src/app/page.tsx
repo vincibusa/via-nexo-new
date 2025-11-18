@@ -52,9 +52,9 @@ export default function Home() {
             </Card>
           </div>
 
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <h3 className="mb-2 font-semibold text-blue-900">ℹ️ Richiedi accesso Manager</h3>
-            <p className="text-sm text-blue-800">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/50 p-4">
+            <h3 className="mb-2 font-semibold text-blue-900 dark:text-blue-100">ℹ️ Richiedi accesso Manager</h3>
+            <p className="text-sm text-blue-800 dark:text-blue-200">
               Se gestisci un locale e vuoi essere presente sulla piattaforma Nexo, contatta un
               amministratore per richiedere l&apos;accesso come manager.
             </p>

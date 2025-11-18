@@ -109,10 +109,10 @@ export default function ManagerPlacesListPage() {
 
   const getEmbeddingBadge = (status: string) => {
     const colors: Record<string, string> = {
-      completed: 'bg-green-500',
-      pending: 'bg-gray-400',
-      processing: 'bg-blue-500',
-      failed: 'bg-red-500',
+      completed: 'bg-green-500 dark:bg-green-600 text-white',
+      pending: 'bg-gray-400 dark:bg-gray-600 text-white',
+      processing: 'bg-blue-500 dark:bg-blue-600 text-white',
+      failed: 'bg-red-500 dark:bg-red-600 text-white',
     }
     return (
       <Badge className={colors[status] || 'bg-gray-400'}>

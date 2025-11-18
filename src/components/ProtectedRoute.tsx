@@ -75,9 +75,9 @@ export function ProtectedRoute({
     if (userLevel < requiredLevel) {
       return (
         <div className="container mx-auto p-8">
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h2 className="text-lg font-semibold text-red-900">Access Denied</h2>
-            <p className="text-sm text-red-700">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4">
+            <h2 className="text-lg font-semibold text-destructive">Access Denied</h2>
+            <p className="text-sm text-destructive/80">
               You don't have permission to access this page.
             </p>
           </div>

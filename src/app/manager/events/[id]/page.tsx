@@ -495,10 +495,10 @@ export default function EventEditPage() {
                     <Badge
                       className={
                         event.embeddings_status === 'completed'
-                          ? 'bg-green-500'
+                          ? 'bg-green-500 dark:bg-green-600 text-white'
                           : event.embeddings_status === 'failed'
-                          ? 'bg-red-500'
-                          : 'bg-gray-400'
+                          ? 'bg-red-500 dark:bg-red-600 text-white'
+                          : 'bg-gray-400 dark:bg-gray-600 text-white'
                       }
                     >
                       {event.embeddings_status}

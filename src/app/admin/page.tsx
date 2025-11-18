@@ -199,9 +199,9 @@ interface ActionCardProps {
 
 function ActionCard({ title, description, icon, link, variant, loading }: ActionCardProps) {
   const variantColors = {
-    warning: 'border-orange-200 bg-orange-50 hover:bg-orange-100',
-    info: 'border-blue-200 bg-blue-50 hover:bg-blue-100',
-    success: 'border-green-200 bg-green-50 hover:bg-green-100',
+    warning: 'border-orange-200 bg-orange-50 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/50 dark:hover:bg-orange-900/50',
+    info: 'border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:hover:bg-blue-900/50',
+    success: 'border-green-200 bg-green-50 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/50 dark:hover:bg-green-900/50',
   }
 
   return (

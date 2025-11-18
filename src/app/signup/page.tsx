@@ -98,13 +98,13 @@ export default function SignupPage() {
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             {success && (
-              <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
+              <div className="rounded-md bg-green-500/10 border border-green-500/20 p-3 text-sm text-green-600 dark:text-green-400">
                 Account creato con successo! Reindirizzamento al login...
               </div>
             )}

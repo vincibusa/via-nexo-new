@@ -75,6 +75,7 @@ export default function EventsListPage() {
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [embeddingLoading, setEmbeddingLoading] = useState<string[]>([])
+  const [batchEmbeddingLoading, setBatchEmbeddingLoading] = useState(false)
 
   useEffect(() => {
     fetchEvents()
@@ -121,10 +122,10 @@ export default function EventsListPage() {
 
   const getEmbeddingBadge = (status: string) => {
     const colors: Record<string, string> = {
-      completed: 'bg-green-500',
-      pending: 'bg-gray-400',
-      processing: 'bg-blue-500',
-      failed: 'bg-red-500',
+      completed: 'bg-green-500 dark:bg-green-600 text-white',
+      pending: 'bg-gray-400 dark:bg-gray-600 text-white',
+      processing: 'bg-blue-500 dark:bg-blue-600 text-white',
+      failed: 'bg-red-500 dark:bg-red-600 text-white',
     }
     return (
       <Badge className={colors[status] || 'bg-gray-400'}>
@@ -214,13 +215,13 @@ export default function EventsListPage() {
   const handleTriggerEmbedding = async (eventId: string) => {
     try {
       setEmbeddingLoading(prev => [...prev, eventId])
-      
+
       const response = await fetch('/api/admin/embeddings/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          resource_type: 'event', 
-          resource_id: eventId 
+        body: JSON.stringify({
+          resource_type: 'event',
+          resource_id: eventId
         }),
       })
 
@@ -235,6 +236,37 @@ export default function EventsListPage() {
       toast.error('Errore durante l\'avvio dell\'embedding')
     } finally {
       setEmbeddingLoading(prev => prev.filter(id => id !== eventId))
+    }
+  }
+
+  const handleBatchEmbedPending = async () => {
+    try {
+      setBatchEmbeddingLoading(true)
+
+      const response = await fetch('/api/admin/embeddings/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'embed_pending_events'
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.results.success > 0 || data.results.failed > 0) {
+          toast.success(`Embedding completato: ${data.results.success} riusciti, ${data.results.failed} falliti`)
+        } else {
+          toast.info('Nessun evento pending da processare')
+        }
+        fetchEvents()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Errore durante il batch embedding')
+      }
+    } catch (error) {
+      toast.error('Errore durante il batch embedding')
+    } finally {
+      setBatchEmbeddingLoading(false)
     }
   }
 
@@ -361,6 +393,19 @@ export default function EventsListPage() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Batch Embedding Button */}
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={handleBatchEmbedPending}
+              disabled={batchEmbeddingLoading}
+              variant="outline"
+              className="min-h-[44px]"
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              {batchEmbeddingLoading ? 'Processando...' : 'Embedding Tutti Pending'}
+            </Button>
           </div>
         </div>
 
