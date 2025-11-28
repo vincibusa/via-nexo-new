@@ -18,41 +18,28 @@ export async function POST(request: NextRequest) {
     // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const bucket = formData.get('bucket') as string // place-images, event-images, avatars
-
-    // Check if user is authorized
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    // Allow all authenticated users for avatar uploads
-    if (bucket !== 'avatars' && (!profile || (profile.role !== 'admin' && profile.role !== 'manager'))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!bucket || !['place-images', 'event-images', 'avatars'].includes(bucket)) {
-      return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
-    }
-
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Only JPEG, PNG, and WebP are allowed' }, { status: 400 })
+      return NextResponse.json({
+        error: 'Invalid file type. Only JPEG, PNG, and WebP are allowed'
+      }, { status: 400 })
     }
 
     // Validate file size (max 5MB)
     const maxSize = 5 * 1024 * 1024 // 5MB
     if (file.size > maxSize) {
-      return NextResponse.json({ error: 'File too large. Maximum size is 5MB' }, { status: 400 })
+      return NextResponse.json({
+        error: 'File too large. Maximum size is 5MB'
+      }, { status: 400 })
     }
 
-    // Generate unique filename
+    // Generate unique filename with user folder structure
     const fileExt = file.name.split('.').pop()
     const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
 
@@ -60,9 +47,9 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage - story-media bucket
     const { data, error } = await supabase.storage
-      .from(bucket)
+      .from('story-media')
       .upload(fileName, buffer, {
         contentType: file.type,
         upsert: false,
@@ -74,11 +61,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fileName)
+    const { data: urlData } = supabase.storage.from('story-media').getPublicUrl(fileName)
 
     return NextResponse.json({
       path: data.path,
       url: urlData.publicUrl,
+      message: 'Story media uploaded successfully'
     })
   } catch (error) {
     console.error('Unexpected error:', error)
@@ -100,35 +88,31 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user is admin or manager
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    // Get file path from query params
+    const searchParams = request.nextUrl.searchParams
+    const path = searchParams.get('path')
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'manager')) {
+    if (!path) {
+      return NextResponse.json({ error: 'Missing path parameter' }, { status: 400 })
+    }
+
+    // Verify user owns the file (path should start with user.id/)
+    if (!path.startsWith(`${user.id}/`)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Get file path and bucket from query params
-    const searchParams = request.nextUrl.searchParams
-    const path = searchParams.get('path')
-    const bucket = searchParams.get('bucket')
-
-    if (!path || !bucket) {
-      return NextResponse.json({ error: 'Missing path or bucket' }, { status: 400 })
-    }
-
     // Delete from Supabase Storage
-    const { error } = await supabase.storage.from(bucket).remove([path])
+    const { error } = await supabase.storage.from('story-media').remove([path])
 
     if (error) {
       console.error('Storage delete error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: 'Story media deleted successfully'
+    })
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
