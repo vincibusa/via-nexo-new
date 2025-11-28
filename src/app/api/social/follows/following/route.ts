@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     // Get following (users that this user follows)
     const { data: following, error, count } = await supabase
       .from('follows')
-      .select('following_id, profiles(id, username, full_name, avatar_url, bio)', {
+      .select('following_id, profiles!follows_following_id_fkey(id, display_name, avatar_url, bio, email)', {
         count: 'exact',
       })
       .eq('follower_id', userId)
@@ -62,18 +62,17 @@ export async function GET(request: NextRequest) {
           .single();
 
         return {
-          ...followingProfile,
+          id: followingProfile.id,
+          display_name: followingProfile.display_name || followingProfile.email?.split('@')[0] || 'Utente',
+          email: followingProfile.email,
+          avatar_url: followingProfile.avatar_url,
+          bio: followingProfile.bio,
           isFollowedByCurrentUser: !!followData,
         };
       })
     );
 
-    return NextResponse.json({
-      following: enrichedFollowing,
-      total: count,
-      limit,
-      offset,
-    });
+    return NextResponse.json(enrichedFollowing);
   } catch (error) {
     console.error('Get following error:', error);
     return NextResponse.json(

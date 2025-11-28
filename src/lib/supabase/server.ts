@@ -1,8 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 export async function createClient() {
   const cookieStore = await cookies()
+  const headerStore = await headers()
+
+  // Check for Authorization header (mobile app uses Bearer token)
+  const authHeader = headerStore.get('authorization')
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +27,11 @@ export async function createClient() {
             // user sessions.
           }
         },
+      },
+      global: {
+        headers: authHeader ? {
+          Authorization: authHeader,
+        } : {},
       },
     }
   )
