@@ -1,8 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { checkCSRFProtection, createCSRFErrorResponse, setCSRFTokenForSafeRequest, recordCSRFEvent } from '@/lib/csrf'
 
 export async function updateSession(request: NextRequest) {
   try {
+    // SICUREZZA: Protezione CSRF per richieste unsafe
+    const csrfCheck = checkCSRFProtection(request)
+    if (!csrfCheck.allowed) {
+      recordCSRFEvent('blocked', csrfCheck.error)
+      return createCSRFErrorResponse(request, csrfCheck.error!, csrfCheck.needsToken)
+    }
+    recordCSRFEvent('allowed')
+
     // Check for required environment variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -139,6 +148,11 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       return NextResponse.redirect(url)
+    }
+
+    // SICUREZZA: Imposta CSRF token per richieste safe (GET, HEAD, OPTIONS)
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())) {
+      supabaseResponse = setCSRFTokenForSafeRequest(supabaseResponse)
     }
 
     return supabaseResponse

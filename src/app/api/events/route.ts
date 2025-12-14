@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate distance if location provided
     let processedResults = results.map((event: any) => {
-      let result: any = {
+      const result: any = {
         ...event,
         // Map database fields to mobile-friendly names
         cover_image: event.cover_image_url,

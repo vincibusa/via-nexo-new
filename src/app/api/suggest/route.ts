@@ -4,6 +4,7 @@ import { runRAGPipeline, SuggestionContext } from '@/lib/ai/rag-pipeline'
 import { logSuggestion } from '@/lib/ai/suggestion-logging'
 import { createClient } from '@/lib/supabase/server'
 import { handleCorsPreflight, withCors } from '@/lib/cors'
+import { checkRateLimit, createRateLimitResponse, getRateLimitHeaders } from '@/lib/rate-limit'
 
 // Input validation schema
 const suggestionRequestSchema = z.object({
@@ -37,6 +38,12 @@ export async function POST(request: NextRequest) {
   const preflightResponse = handleCorsPreflight(request)
   if (preflightResponse) {
     return preflightResponse
+  }
+
+  // SICUREZZA: Rate limiting per AI suggestions
+  const rateLimitResult = checkRateLimit(request, '/api/suggest')
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse('/api/suggest', rateLimitResult.error!, rateLimitResult.resetTime)
   }
 
   try {
@@ -73,13 +80,15 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    // Return result with log ID
+    // Return result with log ID e rate limit headers
+    const successHeaders = getRateLimitHeaders('/api/suggest', rateLimitResult.remainingAttempts, rateLimitResult.resetTime)
+    
     return withCors(
       request,
       NextResponse.json({
         ...result,
         logId,
-      })
+      }, { headers: successHeaders })
     )
   } catch (error) {
     if (error instanceof z.ZodError) {

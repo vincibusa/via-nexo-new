@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     let processedResults = results.map((place: any) => {
       const eventsCount = place.events?.[0]?.count || 0;
 
-      let result: any = {
+      const result: any = {
         ...place,
         // Map database fields to mobile-friendly names
         category: place.place_type,

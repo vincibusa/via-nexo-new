@@ -6,69 +6,84 @@ import { openai } from '@ai-sdk/openai'
 import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
+import { geoCache, apiCache } from '@/lib/cache/enhanced-cache-manager'
+import { geoClusterCache, apiClusterCache } from '@/lib/cache/cluster-memory-manager'
+import { cacheMetrics, cacheProfiler } from '@/lib/cache/cache-metrics'
+import { hybridGeoCache, hybridApiCache } from '@/lib/cache/supabase-cache-manager'
 
-// OPTIMIZED: In-memory cache for geo filtering results
-const geoFilterCache = new Map<string, { 
-  placeIds: string[], 
-  eventIds: string[], 
-  timestamp: number 
-}>()
+// ENHANCED: Advanced cache system replacing simple Map
 const GEO_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (geo data changes slowly)
-const MAX_GEO_CACHE_SIZE = 500
 
 /**
- * OPTIMIZED: Create cache key for geo filtering
+ * ENHANCED: Create hierarchical cache key for geo filtering
+ * Supports multiple radius levels for better hit rates
  */
 function createGeoFilterCacheKey(lat: number, lon: number, radiusKm: number, type: 'places' | 'events'): string {
-  // Round coordinates to 3 decimal places for cache efficiency
-  const roundedLat = Math.round(lat * 1000) / 1000
-  const roundedLon = Math.round(lon * 1000) / 1000
-  const roundedRadius = Math.round(radiusKm * 2) / 2 // Round to nearest 0.5km
+  // OPTIMIZATION: Hierarchical bucketing for better cache efficiency
+  // Round coordinates to appropriate precision based on radius
+  const precision = radiusKm > 10 ? 100 : radiusKm > 5 ? 1000 : 10000
+  const roundedLat = Math.round(lat * precision) / precision
+  const roundedLon = Math.round(lon * precision) / precision
   
-  return `${type}:${roundedLat}:${roundedLon}:${roundedRadius}`
+  // Smart radius bucketing: 1km, 2km, 5km, 10km, 25km, 50km
+  const radiusBuckets = [1, 2, 5, 10, 25, 50]
+  const bucketedRadius = radiusBuckets.find(r => r >= radiusKm) || radiusKm
+  
+  return `${type}:${roundedLat}:${roundedLon}:${bucketedRadius}`
 }
 
 /**
- * OPTIMIZED: Get cached geo filter results
+ * ENHANCED: Get cached geo filter results with hybrid hierarchy (Memory -> Supabase -> null)
  */
-function getCachedGeoResults(cacheKey: string): string[] | null {
-  const cached = geoFilterCache.get(cacheKey)
-  
-  if (cached && Date.now() - cached.timestamp < GEO_CACHE_TTL) {
-    const type = cacheKey.split(':')[0] as 'places' | 'events'
-    return type === 'places' ? cached.placeIds : cached.eventIds
-  }
-  
-  // Clean up expired entries
-  if (cached && Date.now() - cached.timestamp >= GEO_CACHE_TTL) {
-    geoFilterCache.delete(cacheKey)
-  }
-  
-  return null
-}
-
-/**
- * OPTIMIZED: Store geo filter results in cache
- */
-function setCachedGeoResults(cacheKey: string, results: string[], type: 'places' | 'events'): void {
-  // Ensure cache doesn't grow too large
-  if (geoFilterCache.size >= MAX_GEO_CACHE_SIZE) {
-    const oldestKey = geoFilterCache.keys().next().value
-    if (oldestKey) {
-      geoFilterCache.delete(oldestKey)
+async function getCachedGeoResults(cacheKey: string): Promise<string[] | null> {
+  return await cacheProfiler.profile(cacheKey, 'geo', 'get', async () => {
+    // Try hybrid cache (memory + Supabase fallback)
+    const cached = await hybridGeoCache.get(cacheKey)
+    if (cached) {
+      console.log(`[Hybrid Geo Cache] HIT for ${cacheKey} (${cached.length} results)`)
+      return cached
     }
-  }
-  
-  const existing = geoFilterCache.get(cacheKey) || { placeIds: [], eventIds: [], timestamp: Date.now() }
-  
-  if (type === 'places') {
-    existing.placeIds = results
-  } else {
-    existing.eventIds = results
-  }
-  
-  existing.timestamp = Date.now()
-  geoFilterCache.set(cacheKey, existing)
+    
+    // LEGACY: Try cluster cache as final fallback
+    const clusterCached = await geoClusterCache.get(cacheKey)
+    if (clusterCached) {
+      console.log(`[Cluster Geo Cache] LEGACY HIT for ${cacheKey} (${clusterCached.length} results)`)
+      return clusterCached
+    }
+    
+    cacheMetrics.recordMiss(cacheKey, 'geo', 'not_found')
+    return null
+  })
+}
+
+/**
+ * ENHANCED: Store geo filter results in hybrid cache system (Memory + Supabase)
+ */
+async function setCachedGeoResults(cacheKey: string, results: string[], type: 'places' | 'events', lat?: number, lon?: number, radiusKm?: number): Promise<void> {
+  await cacheProfiler.profile(cacheKey, 'geo', 'set', async () => {
+    // Extract coordinates from cache key if not provided
+    const keyParts = cacheKey.split(':')
+    const geoLat = lat ?? parseFloat(keyParts[1])
+    const geoLon = lon ?? parseFloat(keyParts[2])
+    const geoRadius = radiusKm ?? parseInt(keyParts[3])
+
+    // Store in hybrid cache (memory + Supabase persistence)
+    await hybridGeoCache.set(cacheKey, results, {
+      ttl: GEO_CACHE_TTL,
+      tags: ['geo', type],
+      metadata: {
+        lat: geoLat,
+        lon: geoLon,
+        radius_km: geoRadius,
+        result_type: type
+      }
+    })
+    
+    // LEGACY: Also store in cluster cache for backward compatibility
+    await geoClusterCache.set(cacheKey, results, GEO_CACHE_TTL)
+    
+    console.log(`[Hybrid Cache] Cached ${results.length} ${type} for ${cacheKey} (lat: ${geoLat}, lon: ${geoLon}, radius: ${geoRadius}km)`)
+  })
 }
 
 /**
@@ -161,15 +176,13 @@ export async function geoFilterPlaces(
   radiusKm: number = 5,
   category?: string
 ): Promise<string[]> {
-  // Only use cache if no category filter (for simplicity)
-  const cacheKey = !category ? createGeoFilterCacheKey(lat, lon, radiusKm, 'places') : null
+  // ENHANCED: Smart caching even with category filter
+  const cacheKey = createGeoFilterCacheKey(lat, lon, radiusKm, 'places') + (category ? `:${category}` : '')
   
-  if (cacheKey) {
-    const cached = getCachedGeoResults(cacheKey)
-    if (cached) {
-      console.log(`[Geo Filter Places] Cache HIT for ${cacheKey} (${cached.length} places)`)
-      return cached
-    }
+  // Try enhanced cache first
+  const cached = await getCachedGeoResults(cacheKey)
+  if (cached) {
+    return cached
   }
 
   const supabase = await getReadOnlyClient()
@@ -204,11 +217,8 @@ export async function geoFilterPlaces(
   // Return max 100 candidates
   const results = (data || []).slice(0, 100).map((p: any) => p.id)
   
-  // Cache results if no category filter
-  if (cacheKey) {
-    setCachedGeoResults(cacheKey, results, 'places')
-    console.log(`[Geo Filter Places] Cached ${results.length} results for ${cacheKey}`)
-  }
+  // ENHANCED: Always cache results for performance
+  await setCachedGeoResults(cacheKey, results, 'places', lat, lon, radiusKm)
 
   return results
 }
@@ -262,7 +272,16 @@ export function buildSemanticQuery(context: SuggestionContext): string {
 }
 
 /**
+ * OPTIMIZED: Create cache key for vector search results
+ */
+function createVectorSearchCacheKey(embeddingHash: string, candidateIds: string[], topK: number): string {
+  const idsHash = hashText(candidateIds.sort().join(':'))
+  return `vector_search:${embeddingHash}:${idsHash}:${topK}`
+}
+
+/**
  * Step C: Vector Search - Find similar places using pgvector
+ * OPTIMIZED: Added vector search result caching
  */
 export async function vectorSearch(
   queryEmbedding: number[],
@@ -275,6 +294,18 @@ export async function vectorSearch(
     return []
   }
 
+  // OPTIMIZED: Cache vector search results using embedding hash
+  const embeddingHash = hashText(queryEmbedding.slice(0, 10).join(','))
+  const cacheKey = createVectorSearchCacheKey(embeddingHash, candidateIds, topK)
+
+  // Try to get cached vector search results
+  const cachedResults = await hybridApiCache.get(cacheKey)
+  if (cachedResults) {
+    console.log(`[Vector Search Cache] HIT for ${cacheKey}`)
+    cacheMetrics.recordHit(cacheKey, 'vector_search', 1)
+    return cachedResults
+  }
+
   // pgvector cosine similarity search
   const { data, error } = await supabase.rpc('match_place_embeddings', {
     query_embedding: queryEmbedding,
@@ -285,6 +316,7 @@ export async function vectorSearch(
 
   if (error) {
     console.error('[Vector Search] Error:', error)
+    cacheMetrics.recordMiss(cacheKey, 'vector_search', 'not_found')
     return []
   }
 
@@ -301,6 +333,12 @@ export async function vectorSearch(
     return acc
   }, {})
   console.log(`[Vector Search] Unique places:`, Object.keys(byPlace).length)
+
+  // OPTIMIZED: Cache vector search results (5 minute TTL)
+  await hybridApiCache.set(cacheKey, results, {
+    ttl: 5 * 60 * 1000,
+    tags: ['vector_search', 'places']
+  })
 
   return results
 }
@@ -584,9 +622,9 @@ export async function geoFilterEvents(
 ): Promise<string[]> {
   const cacheKey = createGeoFilterCacheKey(lat, lon, radiusKm, 'events')
   
-  const cached = getCachedGeoResults(cacheKey)
+  // ENHANCED: Use async cache system
+  const cached = await getCachedGeoResults(cacheKey)
   if (cached) {
-    console.log(`[Geo Filter Events] Cache HIT for ${cacheKey} (${cached.length} events)`)
     return cached
   }
 
@@ -607,15 +645,23 @@ export async function geoFilterEvents(
 
   const results = (data || []).slice(0, 100).map((e: any) => e.id)
   
-  // Cache results
-  setCachedGeoResults(cacheKey, results, 'events')
-  console.log(`[Geo Filter Events] Cached ${results.length} results for ${cacheKey}`)
+  // ENHANCED: Async cache storage
+  await setCachedGeoResults(cacheKey, results, 'events', lat, lon, radiusKm)
 
   return results
 }
 
 /**
+ * OPTIMIZED: Create cache key for event vector search results
+ */
+function createEventVectorSearchCacheKey(embeddingHash: string, candidateIds: string[], topK: number): string {
+  const idsHash = hashText(candidateIds.sort().join(':'))
+  return `vector_search_events:${embeddingHash}:${idsHash}:${topK}`
+}
+
+/**
  * Step C (Events): Vector Search - Find similar events using pgvector
+ * OPTIMIZED: Added caching for event vector search
  */
 export async function vectorSearchEvents(
   queryEmbedding: number[],
@@ -628,6 +674,17 @@ export async function vectorSearchEvents(
     return []
   }
 
+  // OPTIMIZED: Cache event vector search results
+  const embeddingHash = hashText(queryEmbedding.slice(0, 10).join(','))
+  const cacheKey = createEventVectorSearchCacheKey(embeddingHash, candidateIds, topK)
+
+  const cachedResults = await hybridApiCache.get(cacheKey)
+  if (cachedResults) {
+    console.log(`[Event Vector Search Cache] HIT for ${cacheKey}`)
+    cacheMetrics.recordHit(cacheKey, 'vector_search_events', 1)
+    return cachedResults
+  }
+
   const { data, error } = await supabase.rpc('match_event_embeddings', {
     query_embedding: queryEmbedding,
     candidate_ids: candidateIds,
@@ -637,6 +694,7 @@ export async function vectorSearchEvents(
 
   if (error) {
     console.error('[Vector Search Events] Error:', error)
+    cacheMetrics.recordMiss(cacheKey, 'vector_search_events', 'not_found')
     return []
   }
 
@@ -646,6 +704,13 @@ export async function vectorSearchEvents(
   }))
 
   console.log(`[Vector Search Events] Found ${results.length} similar events`)
+
+  // OPTIMIZED: Cache event vector search results
+  await hybridApiCache.set(cacheKey, results, {
+    ttl: 5 * 60 * 1000,
+    tags: ['vector_search', 'events']
+  })
+
   return results
 }
 

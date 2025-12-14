@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createNotification } from '@/lib/services/notifications';
 
 export async function GET(request: NextRequest) {
   try {
@@ -170,6 +171,25 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to follow user' },
         { status: 500 }
       );
+    }
+
+    // Create notification for the followed user
+    try {
+      await createNotification({
+        user_id: followingId,
+        actor_id: user.id,
+        type: 'new_follower',
+        entity_type: 'user',
+        entity_id: user.id,
+        content: `${user.id} ti ha iniziato a seguire`,
+        metadata: {
+          follower_id: user.id,
+          following_id: followingId
+        }
+      });
+    } catch (notificationError) {
+      // Log but don't fail the follow operation
+      console.warn('Failed to create follow notification:', notificationError);
     }
 
     return NextResponse.json({ success: true }, { status: 201 });

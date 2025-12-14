@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { createNotification } from '@/lib/services/notifications'
 
 // Validation schemas
 const sendMessageSchema = z.object({
@@ -239,6 +240,53 @@ export async function POST(
         message_id: message.id,
         user_id: user.id,
       })
+
+    // Get conversation participants to send notifications
+    const { data: participants } = await supabase
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', user.id) // Exclude sender
+
+    // Send notifications to other participants
+    if (participants && participants.length > 0) {
+      const notificationPromises = participants.map(async (participant) => {
+        try {
+          // Get conversation name for notification
+          const { data: conversation } = await supabase
+            .from('conversations')
+            .select('name')
+            .eq('id', conversationId)
+            .single()
+
+          await createNotification({
+            user_id: participant.user_id,
+            actor_id: user.id,
+            type: 'message',
+            entity_type: 'conversation',
+            entity_id: conversationId,
+            content: validatedInput.content || 'Nuovo messaggio',
+            metadata: {
+              conversation_id: conversationId,
+              conversation_name: conversation?.name || 'Chat',
+              message_preview: validatedInput.content ? 
+                (validatedInput.content.length > 50 ? 
+                  validatedInput.content.substring(0, 50) + '...' : 
+                  validatedInput.content) : 
+                'Nuovo messaggio',
+              message_type: validatedInput.message_type
+            }
+          })
+        } catch (notificationError) {
+          console.warn('Failed to create message notification:', notificationError)
+        }
+      })
+
+      // Run notifications in parallel but don't block response
+      Promise.allSettled(notificationPromises).catch(() => {
+        // Ignore errors in notification sending
+      })
+    }
 
     return Response.json({
       message: {

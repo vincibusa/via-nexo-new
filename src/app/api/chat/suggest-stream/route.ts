@@ -15,6 +15,7 @@ import {
 import { generateEmbedding } from '@/lib/ai/embedding'
 import { createClient } from '@/lib/supabase/server'
 import { handleCorsPreflight, getCorsHeaders } from '@/lib/cors'
+import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -356,6 +357,12 @@ export async function GET(request: NextRequest) {
 }
 
 async function handleChatSuggestStream(request: NextRequest) {
+  // SICUREZZA: Rate limiting per chat AI stream
+  const rateLimitResult = checkRateLimit(request, '/api/chat/suggest-stream')
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse('/api/chat/suggest-stream', rateLimitResult.error!, rateLimitResult.resetTime)
+  }
+
   // OTTIMIZZAZIONE: Riutilizza connessione Supabase per tutta la richiesta
   const supabase = await createClient()
 

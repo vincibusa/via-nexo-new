@@ -89,19 +89,24 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching last messages:', lastMessagesError)
     }
 
-    // Get unread counts
-    const unreadCounts = await Promise.all(
-      participations.map(async (p) => {
-        const { count } = await supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('conversation_id', p.conversation_id)
-          .neq('sender_id', user.id)
-          .gt('created_at', p.last_read_at || '1970-01-01')
+    // OPTIMIZED: Get unread counts in a single RPC call instead of N+1 queries
+    const lastReadAts: Record<string, string> = {}
+    participations.forEach(p => {
+      if (p.last_read_at) {
+        lastReadAts[p.conversation_id] = p.last_read_at
+      }
+    })
 
-        return { conversation_id: p.conversation_id, unread_count: count || 0 }
+    const { data: unreadCounts, error: unreadError } = await supabase
+      .rpc('get_unread_message_counts', {
+        p_conversation_ids: conversationIds,
+        p_user_id: user.id,
+        p_last_read_ats: lastReadAts
       })
-    )
+
+    if (unreadError) {
+      console.error('Error fetching unread counts:', unreadError)
+    }
 
     // Build response
     const conversations = participations.map(p => {

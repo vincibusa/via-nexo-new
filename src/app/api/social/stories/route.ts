@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createNotification } from '@/lib/services/notifications';
 
 export async function GET(request: NextRequest) {
   try {
@@ -115,6 +116,44 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create story' },
         { status: 500 }
       );
+    }
+
+    // Create notifications for followers (async - don't block response)
+    try {
+      // Get user's followers
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', user.id);
+
+      if (followers && followers.length > 0) {
+        // Create batch notifications for followers
+        const notificationPromises = followers.map(follower => 
+          createNotification({
+            user_id: follower.follower_id,
+            actor_id: user.id,
+            type: 'new_story',
+            entity_type: 'story',
+            entity_id: story.id,
+            content: 'Ha pubblicato una nuova story',
+            metadata: {
+              story_id: story.id,
+              media_type: media_type,
+              has_text: !!text_overlay
+            }
+          }).catch(err => console.error('Failed to create notification for follower:', err))
+        );
+
+        // Run notifications in background
+        Promise.allSettled(notificationPromises)
+          .then(results => {
+            const successful = results.filter(r => r.status === 'fulfilled').length;
+            console.log(`Created ${successful}/${followers.length} story notifications`);
+          });
+      }
+    } catch (notificationError) {
+      console.error('Error creating story notifications:', notificationError);
+      // Don't fail the story creation if notifications fail
     }
 
     return NextResponse.json(story, { status: 201 });

@@ -15,7 +15,7 @@ export async function GET(
     const userLon = searchParams.get('lon');
 
     // Build query
-    let query = supabase
+    const query = supabase
       .from('places')
       .select(`
         *,
