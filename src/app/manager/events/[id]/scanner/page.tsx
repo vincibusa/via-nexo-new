@@ -208,17 +208,16 @@ export default function ScannerPage() {
           <CardContent>
             <div className="w-full max-w-md mx-auto">
               <Scanner
-                onDecode={(result) => {
-                  const text = result.getText();
-                  if (text) {
-                    handleQRCodeScanned(text);
+                onScan={(detectedCodes: Array<{ rawValue: string }>) => {
+                  if (detectedCodes && detectedCodes.length > 0) {
+                    const text = detectedCodes[0].rawValue;
+                    if (text) {
+                      handleQRCodeScanned(text);
+                    }
                   }
                 }}
                 onError={(error) => {
                   console.error('QR Scanner error:', error);
-                }}
-                components={{
-                  tracker: true,
                 }}
                 styles={{
                   container: {

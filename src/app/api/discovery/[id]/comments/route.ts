@@ -72,15 +72,19 @@ export async function GET(
           is_liked = !!like
         }
 
+        const userProfile = Array.isArray(comment.user) 
+          ? comment.user[0] 
+          : comment.user;
+
         return {
           ...comment,
           is_liked,
-          user: comment.user
+          user: userProfile
             ? {
-                id: comment.user.id,
-                username: comment.user.display_name || comment.user.email?.split('@')[0] || 'Anonymous',
-                avatar_url: comment.user.avatar_url || null,
-                is_verified: comment.user.is_verified || false,
+                id: userProfile.id,
+                username: userProfile.display_name || userProfile.email?.split('@')[0] || 'Anonymous',
+                avatar_url: userProfile.avatar_url || null,
+                is_verified: userProfile.is_verified || false,
               }
             : null,
         }
@@ -173,15 +177,19 @@ export async function POST(
     }
 
     // Format response
+    const userProfile = Array.isArray(comment.user) 
+      ? comment.user[0] 
+      : comment.user;
+
     const formattedComment = {
       ...comment,
       is_liked: false,
-      user: comment.user
+      user: userProfile
         ? {
-            id: comment.user.id,
-            username: comment.user.display_name || comment.user.email?.split('@')[0] || 'Anonymous',
-            avatar_url: comment.user.avatar_url || null,
-            is_verified: comment.user.is_verified || false,
+            id: userProfile.id,
+            username: userProfile.display_name || userProfile.email?.split('@')[0] || 'Anonymous',
+            avatar_url: userProfile.avatar_url || null,
+            is_verified: userProfile.is_verified || false,
           }
         : null,
     }

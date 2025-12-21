@@ -361,7 +361,7 @@ async function getDailyRecommendationIds(): Promise<string[]> {
       .eq('featured_date', today)
       .eq('entity_type', 'place')
 
-    return recs?.map(r => r.entity_id) || []
+    return recs?.map((r: { entity_id: string }) => r.entity_id) || []
   } catch (error) {
     console.error('[Daily Recommendations] Error fetching daily recommendations:', error)
     return []
@@ -761,7 +761,7 @@ async function getDailyEventRecommendationIds(): Promise<string[]> {
       .eq('featured_date', today)
       .eq('entity_type', 'event')
 
-    return recs?.map(r => r.entity_id) || []
+    return recs?.map((r: { entity_id: string }) => r.entity_id) || []
   } catch (error) {
     console.error('[Daily Recommendations] Error fetching daily event recommendations:', error)
     return []

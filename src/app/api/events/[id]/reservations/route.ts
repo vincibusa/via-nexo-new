@@ -340,17 +340,18 @@ export async function POST(
       if (!guestError && guestReservation) {
         guestReservations.push(guestReservation);
         
-        // Send notification to guest (use 'message' type as fallback)
-        // Note: 'reservation_created' is not in the allowed notification types
+        // Send notification to guest
         try {
           await createNotification({
             user_id: guest_id,
-            type: 'message', // Using 'message' type as it's in the allowed list
-            title: 'Nuova prenotazione',
-            message: `Hai una prenotazione per "${event.title}"`,
-            data: {
+            type: 'reservation_invitation',
+            content: `Hai una prenotazione per "${event.title}"`,
+            entity_type: 'reservation',
+            entity_id: guestReservation.id,
+            metadata: {
               reservation_id: guestReservation.id,
               event_id: id,
+              event_title: event.title,
             },
           });
         } catch (notificationError) {
