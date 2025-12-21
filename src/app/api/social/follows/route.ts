@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         .select(
           `
           following_id,
-          profile:profiles!following_id(*)
+          profile:profiles!follows_following_id_fkey(id, display_name, avatar_url, bio, email)
         `
         )
         .eq('follower_id', userId);
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
         .select(
           `
           follower_id,
-          profile:profiles!follower_id(*)
+          profile:profiles!follows_follower_id_fkey(id, display_name, avatar_url, bio)
         `
         )
         .eq('following_id', userId);

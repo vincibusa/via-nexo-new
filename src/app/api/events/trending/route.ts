@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json({
-        events: events?.map(event => formatEvent(event)) || [],
+        events: events?.map((event: any) => formatEvent(event)) || [],
         count: events?.length || 0,
         generated_at: new Date().toISOString()
       })
@@ -106,35 +106,52 @@ export async function POST(request: NextRequest) {
     // 2. Calcola punteggio trending per ogni evento
     const eventIds = nearbyEvents.map((e: any) => e.id)
     
-    // Ottieni statistiche per ogni evento
-    const { data: eventStats } = await supabase
+    // Ottieni statistiche per ogni evento (query separate per status)
+    const { data: goingStats } = await supabase
       .from('event_attendance')
-      .select(`
-        event_id,
-        status,
-        count:count(*)
-      `)
+      .select('event_id')
       .in('event_id', eventIds)
-      .in('status', ['going', 'interested'])
-      .group('event_id, status')
+      .eq('status', 'going')
+
+    const { data: interestedStats } = await supabase
+      .from('event_attendance')
+      .select('event_id')
+      .in('event_id', eventIds)
+      .eq('status', 'interested')
+
+    // Aggrega manualmente i conteggi
+    const eventStats = eventIds.map((eventId: string) => {
+      const goingCount = goingStats?.filter((s: any) => s.event_id === eventId).length || 0
+      const interestedCount = interestedStats?.filter((s: any) => s.event_id === eventId).length || 0
+      return {
+        event_id: eventId,
+        going: goingCount,
+        interested: interestedCount
+      }
+    })
 
     // Ottieni visualizzazioni recenti
     const oneWeekAgo = new Date()
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
     
-    const { data: recentViews } = await supabase
+    const { data: recentViewsData } = await supabase
       .from('event_views')
-      .select('event_id, count:count(*)')
+      .select('event_id')
       .in('event_id', eventIds)
       .gt('viewed_at', oneWeekAgo.toISOString())
-      .group('event_id')
+
+    // Aggrega manualmente le visualizzazioni
+    const recentViews = eventIds.map((eventId: string) => ({
+      event_id: eventId,
+      count: recentViewsData?.filter((v: any) => v.event_id === eventId).length || 0
+    }))
 
     // 3. Calcola punteggio trending
     const trendingScores = nearbyEvents.map((event: any) => {
-      const stats = eventStats?.filter(s => s.event_id === event.id) || []
-      const goingCount = stats.find(s => s.status === 'going')?.count || 0
-      const interestedCount = stats.find(s => s.status === 'interested')?.count || 0
-      const recentViewCount = recentViews?.find(v => v.event_id === event.id)?.count || 0
+      const stats = eventStats?.find((s: any) => s.event_id === event.id)
+      const goingCount = stats?.going || 0
+      const interestedCount = stats?.interested || 0
+      const recentViewCount = recentViews?.find((v: any) => v.event_id === event.id)?.count || 0
       
       // Calcola punteggio: going (peso 3), interested (peso 2), views (peso 1)
       let score = (goingCount * 3) + (interestedCount * 2) + recentViewCount
@@ -168,9 +185,9 @@ export async function POST(request: NextRequest) {
 
     // 4. Ordina per punteggio trending e limita
     const trendingEvents = trendingScores
-      .sort((a, b) => b.trending_score - a.trending_score)
+      .sort((a: any, b: any) => b.trending_score - a.trending_score)
       .slice(0, limit)
-      .map(event => formatEvent(event))
+      .map((event: any) => formatEvent(event))
 
     return NextResponse.json({
       events: trendingEvents,
@@ -191,6 +208,7 @@ export async function POST(request: NextRequest) {
  * Formatta evento per risposta API
  */
 function formatEvent(event: any) {
+  const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues
   return {
     id: event.id,
     title: event.title,
@@ -206,16 +224,16 @@ function formatEvent(event: any) {
     ticket_url: event.ticket_url,
     ticket_availability: event.ticket_availability,
     place: {
-      id: event.venues?.id,
-      name: event.venues?.name,
-      category: event.venues?.category,
-      address: event.venues?.address,
-      city: event.venues?.city,
-      latitude: parseLocation(event.venues?.location).lat,
-      longitude: parseLocation(event.venues?.location).lng,
-      cover_image: event.venues?.cover_image,
-      price_range: event.venues?.price_range,
-      verified: event.venues?.verified
+      id: venue?.id,
+      name: venue?.name,
+      category: venue?.category,
+      address: venue?.address,
+      city: venue?.city,
+      latitude: parseLocation(venue?.location).lat,
+      longitude: parseLocation(venue?.location).lng,
+      cover_image: venue?.cover_image,
+      price_range: venue?.price_range,
+      verified: venue?.verified
     },
     trending_score: event.trending_score,
     going_count: event.going_count || 0,

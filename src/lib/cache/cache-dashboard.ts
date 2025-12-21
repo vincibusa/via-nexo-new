@@ -286,7 +286,7 @@ export async function performCacheCleanup(): Promise<{
       success: false,
       entriesRemoved: 0,
       layers: {},
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     }
   }
 }
@@ -359,7 +359,7 @@ export async function invalidateCachePattern(pattern: string): Promise<{
       success: false,
       entriesInvalidated: 0,
       layers: {},
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     }
   }
 }

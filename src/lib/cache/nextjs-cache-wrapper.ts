@@ -63,7 +63,7 @@ export function cacheableFunction<Args extends any[], Return>(
       } catch (error) {
         // Record error metrics
         const duration = performance.now() - startTime
-        cacheMetrics.recordMiss(`${keyPrefix}:${keyParts.join(':')}`, 'nextjs-cache', 'error')
+        cacheMetrics.recordMiss(`${keyPrefix}:${keyParts.join(':')}`, 'nextjs-cache', 'not_found')
         
         // Try hybrid cache fallback if enabled
         if (fallbackToHybrid) {

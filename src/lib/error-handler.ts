@@ -103,18 +103,25 @@ export const ERROR_CODES = {
  */
 function sanitizeSupabaseError(error: any): SecureError {
   if (!error) {
-    return ERROR_CODES.INTERNAL_ERROR
+    return {
+      ...ERROR_CODES.INTERNAL_ERROR,
+      publicMessage: 'Si è verificato un errore. Riprova più tardi.'
+    }
   }
   
   // Errori di autenticazione Supabase
   if (error.code === 'invalid_credentials' || error.message?.includes('Invalid login')) {
-    return ERROR_CODES.AUTH_INVALID_CREDENTIALS
+    return {
+      ...ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+      publicMessage: 'Credenziali non valide'
+    }
   }
   
   if (error.code === 'email_not_confirmed' || error.message?.includes('email not confirmed')) {
     return {
       ...ERROR_CODES.AUTH_ACCESS_DENIED,
-      message: 'Email non confermata'
+      message: 'Email non confermata',
+      publicMessage: 'Email non confermata'
     }
   }
   
@@ -130,11 +137,17 @@ function sanitizeSupabaseError(error: any): SecureError {
   
   // Errori di permessi
   if (error.code === 'insufficient_permissions' || error.message?.includes('permission')) {
-    return ERROR_CODES.AUTH_ACCESS_DENIED
+    return {
+      ...ERROR_CODES.AUTH_ACCESS_DENIED,
+      publicMessage: 'Accesso negato'
+    }
   }
   
   // Default: errore generico senza dettagli
-  return ERROR_CODES.INTERNAL_ERROR
+  return {
+    ...ERROR_CODES.INTERNAL_ERROR,
+    publicMessage: 'Si è verificato un errore. Riprova più tardi.'
+  }
 }
 
 /**
@@ -147,6 +160,7 @@ function sanitizeZodError(error: any): SecureError {
   return {
     ...ERROR_CODES.VALIDATION_ERROR,
     message: `Errore di validazione (${issueCount} problemi)`,
+    publicMessage: 'Dati non validi',
     internalDetails: process.env.NODE_ENV === 'development' ? error.issues : undefined
   }
 }
@@ -156,15 +170,24 @@ function sanitizeZodError(error: any): SecureError {
  */
 function sanitizeExternalAPIError(error: any): SecureError {
   if (error?.code?.includes('rate_limit')) {
-    return ERROR_CODES.RATE_LIMIT_EXCEEDED
+    return {
+      ...ERROR_CODES.RATE_LIMIT_EXCEEDED,
+      publicMessage: 'Troppi tentativi. Riprova più tardi'
+    }
   }
   
   if (error?.code?.includes('insufficient_quota') || error?.message?.includes('quota')) {
-    return ERROR_CODES.AI_SERVICE_ERROR
+    return {
+      ...ERROR_CODES.AI_SERVICE_ERROR,
+      publicMessage: 'Servizio temporaneamente non disponibile'
+    }
   }
   
   // Non esporre mai dettagli di API esterne
-  return ERROR_CODES.AI_SERVICE_ERROR
+  return {
+    ...ERROR_CODES.AI_SERVICE_ERROR,
+    publicMessage: 'Servizio temporaneamente non disponibile'
+  }
 }
 
 /**
@@ -217,7 +240,10 @@ export function sanitizeError(error: any, type?: 'supabase' | 'zod' | 'external'
     case 'external':
       return sanitizeExternalAPIError(error)
     default:
-      return ERROR_CODES.INTERNAL_ERROR
+      return {
+        ...ERROR_CODES.INTERNAL_ERROR,
+        publicMessage: 'Si è verificato un errore. Riprova più tardi.'
+      }
   }
 }
 

@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       // This is a simplified approach - in production, use proper subqueries
       const { data: eventUsers } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url, bio')
+        .select('id, display_name, avatar_url, bio')
         .limit(limit - suggestions.length);
 
       if (eventUsers) {
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       // Get popular users (by followers count)
       const { data: popularUsers } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url, bio')
+        .select('id, display_name, avatar_url, bio')
         .range(0, limit - suggestions.length - 1)
         .order('followers_count', { ascending: false });
 

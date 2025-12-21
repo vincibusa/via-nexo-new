@@ -347,6 +347,27 @@ export async function vectorSearch(
  * Step D: Re-Ranking - Apply business rules and boost/penalize scores
  * OPTIMIZED: Enhanced with parallel distance calculations and metadata caching
  */
+/**
+ * Get today's daily recommendation place IDs
+ */
+async function getDailyRecommendationIds(): Promise<string[]> {
+  try {
+    const batchClient = await getBatchClient()
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data: recs } = await batchClient
+      .from('daily_recommendations')
+      .select('entity_id')
+      .eq('featured_date', today)
+      .eq('entity_type', 'place')
+
+    return recs?.map(r => r.entity_id) || []
+  } catch (error) {
+    console.error('[Daily Recommendations] Error fetching daily recommendations:', error)
+    return []
+  }
+}
+
 export async function reRank(
   topKIds: string[],
   context: SuggestionContext
@@ -370,12 +391,20 @@ export async function reRank(
 
   console.log(`[Re-rank] Fetched ${places.length} unique places from DB`)
 
+  // Get daily recommendations for today
+  const dailyRecIds = await getDailyRecommendationIds()
+
   // OTTIMIZZAZIONE AGGRESSIVA: Pre-compute distanze e scoring semplificato
   const targetLat = context.location.lat
   const targetLon = context.location.lon
-  
+
   const placesWithScores = places.map((place: any) => {
     let score = 1.0 // Base score
+
+    // BOOST: Daily recommendations get significant priority
+    if (dailyRecIds.includes(place.id)) {
+      score += 0.5
+    }
 
     // FAST: Boost verified places
     if (place.verification_status === 'approved') score += 0.1
@@ -718,6 +747,27 @@ export async function vectorSearchEvents(
  * Step D (Events): Re-Ranking - Apply event-specific business rules
  * OPTIMIZED: Enhanced with parallel distance calculations and metadata caching
  */
+/**
+ * Get today's daily recommendation event IDs
+ */
+async function getDailyEventRecommendationIds(): Promise<string[]> {
+  try {
+    const batchClient = await getBatchClient()
+    const today = new Date().toISOString().split('T')[0]
+
+    const { data: recs } = await batchClient
+      .from('daily_recommendations')
+      .select('entity_id')
+      .eq('featured_date', today)
+      .eq('entity_type', 'event')
+
+    return recs?.map(r => r.entity_id) || []
+  } catch (error) {
+    console.error('[Daily Recommendations] Error fetching daily event recommendations:', error)
+    return []
+  }
+}
+
 export async function reRankEvents(
   topKIds: string[],
   context: SuggestionContext
@@ -754,14 +804,22 @@ export async function reRankEvents(
 
   console.log(`[Re-rank Events] Fetched ${events.length} events from DB`)
 
+  // Get daily recommendations for today
+  const dailyRecIds = await getDailyEventRecommendationIds()
+
   const now = new Date()
   const targetLat = context.location.lat
   const targetLon = context.location.lon
-  
+
   // OTTIMIZZAZIONE AGGRESSIVA: Scoring semplificato per eventi
   const eventsWithScores = events.map((event: any) => {
     let score = 1.0
     let approximateDistance = 0
+
+    // BOOST: Daily recommendations get significant priority
+    if (dailyRecIds.includes(event.id)) {
+      score += 0.5
+    }
 
     // FAST: Distance calculation semplificato
     if (event.place) {

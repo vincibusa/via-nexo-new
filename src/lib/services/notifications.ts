@@ -16,7 +16,7 @@ export interface NotificationData {
   metadata?: Record<string, unknown>
 }
 
-export type NotificationType = 
+export type NotificationType =
   | 'new_follower'
   | 'post_like'
   | 'post_comment'
@@ -31,6 +31,9 @@ export type NotificationType =
   | 'new_story'
   | 'story_engagement'
   | 'daily_digest'
+  | 'reservation_invitation'
+  | 'reservation_cancelled'
+  | 'reservation_checked_in'
 
 /**
  * Crea una notifica nel database

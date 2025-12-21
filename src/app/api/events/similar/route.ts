@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
           id,
           title,
           category,
+          start_datetime,
+          ticket_price_min,
           venues!inner (
             category
           )
@@ -65,7 +67,22 @@ export async function GET(request: NextRequest) {
     const eventCategories = new Set<string>()
     const venueCategories = new Set<string>()
     
-    pastAttendance.forEach(attendance => {
+    type AttendanceWithEvents = {
+      event_id: string
+      status: string
+      events: {
+        id: string
+        title: string
+        category: string
+        start_datetime: string
+        ticket_price_min?: number | null
+        venues: {
+          category: string
+        }
+      }
+    }
+    
+    ;(pastAttendance as unknown as AttendanceWithEvents[]).forEach(attendance => {
       if (attendance.events?.category) {
         eventCategories.add(attendance.events.category)
       }
@@ -130,12 +147,13 @@ export async function GET(request: NextRequest) {
       }
       
       // Punteggio per categoria venue
-      if (venueCategories.has(event.venues?.category)) {
+      const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues
+      if (venue && venueCategories.has(venue.category)) {
         similarityScore += 25
       }
       
       // Punteggio per prezzo simile (se disponibile)
-      if (pastAttendance.some(att => {
+      if ((pastAttendance as unknown as AttendanceWithEvents[]).some(att => {
         const pastEvent = att.events
         return pastEvent?.ticket_price_min && event.ticket_price_min &&
           Math.abs(pastEvent.ticket_price_min - event.ticket_price_min) < 10
@@ -147,7 +165,7 @@ export async function GET(request: NextRequest) {
       const eventDate = new Date(event.start_datetime)
       const eventDay = eventDate.getDay()
       
-      const hasSameDay = pastAttendance.some(att => {
+      const hasSameDay = (pastAttendance as unknown as AttendanceWithEvents[]).some(att => {
         const pastDate = new Date(att.events?.start_datetime || '')
         return pastDate.getDay() === eventDay
       })
@@ -159,7 +177,7 @@ export async function GET(request: NextRequest) {
       // Bonus per eventi nello stesso orario (±2 ore)
       const eventHour = eventDate.getHours()
       
-      const hasSimilarTime = pastAttendance.some(att => {
+      const hasSimilarTime = (pastAttendance as unknown as AttendanceWithEvents[]).some(att => {
         const pastDate = new Date(att.events?.start_datetime || '')
         const pastHour = pastDate.getHours()
         return Math.abs(pastHour - eventHour) <= 2
@@ -244,7 +262,7 @@ async function getPopularEvents(supabase: any, limit: number) {
     )
   }
 
-  const events = popularEvents?.map(event => formatEvent(event)) || []
+  const events = popularEvents?.map((event: any) => formatEvent(event)) || []
 
   return NextResponse.json({
     events,
@@ -268,8 +286,9 @@ function generateMatchReasons(
     reasons.push(`Categoria simile: ${event.category}`)
   }
   
-  if (venueCategories.has(event.venues?.category)) {
-    reasons.push(`Tipo di locale simile: ${event.venues?.category}`)
+  const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues
+  if (venue && venueCategories.has(venue.category)) {
+    reasons.push(`Tipo di locale simile: ${venue.category}`)
   }
   
   if (reasons.length === 0) {
@@ -283,6 +302,7 @@ function generateMatchReasons(
  * Formatta evento per risposta API
  */
 function formatEvent(event: any) {
+  const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues
   return {
     id: event.id,
     title: event.title,
@@ -298,16 +318,16 @@ function formatEvent(event: any) {
     ticket_url: event.ticket_url,
     ticket_availability: event.ticket_availability,
     place: {
-      id: event.venues?.id,
-      name: event.venues?.name,
-      category: event.venues?.category,
-      address: event.venues?.address,
-      city: event.venues?.city,
-      latitude: parseLocation(event.venues?.location).lat,
-      longitude: parseLocation(event.venues?.location).lng,
-      cover_image: event.venues?.cover_image,
-      price_range: event.venues?.price_range,
-      verified: event.venues?.verified
+      id: venue?.id,
+      name: venue?.name,
+      category: venue?.category,
+      address: venue?.address,
+      city: venue?.city,
+      latitude: parseLocation(venue?.location).lat,
+      longitude: parseLocation(venue?.location).lng,
+      cover_image: venue?.cover_image,
+      price_range: venue?.price_range,
+      verified: venue?.verified
     },
     similarity_score: event.similarity_score || 0,
     match_reasons: event.match_reasons || []

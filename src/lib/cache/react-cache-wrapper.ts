@@ -58,7 +58,7 @@ export function createCachedFunction<Args extends any[], Return>(
     } catch (error) {
       // Record error and try hybrid fallback
       const duration = performance.now() - startTime
-      cacheMetrics.recordMiss(requestKey, 'react-cache', 'error')
+      cacheMetrics.recordMiss(requestKey, 'react-cache', 'not_found')
       
       if (enableHybridFallback) {
         try {
@@ -330,7 +330,7 @@ export const getCachedPlacesBatch = createCachedFunction(
     
     // Convert to map for easy access
     const placesMap = new Map()
-    data.forEach(place => placesMap.set(place.id, place))
+    data.forEach((place: any) => placesMap.set(place.id, place))
     
     return placesMap
   },

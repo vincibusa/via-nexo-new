@@ -15,6 +15,8 @@ import {
   LogOut,
   Menu,
   X,
+  Sparkles,
+  Play,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
@@ -39,6 +41,8 @@ const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Places', href: '/admin/places', icon: MapPin },
   { name: 'Eventi', href: '/admin/events', icon: Calendar },
+  { name: 'Discovery Feed', href: '/admin/discovery', icon: Play },
+  { name: 'Consigliati del Giorno', href: '/admin/recommendations', icon: Sparkles },
   { name: 'Manager', href: '/admin/managers', icon: Users },
   { name: 'Richieste Manager', href: '/admin/manager-requests', icon: UserCheck },
   { name: 'Suggerimenti', href: '/admin/suggestions', icon: MessageSquare },

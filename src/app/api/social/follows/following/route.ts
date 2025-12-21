@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     // Get following (users that this user follows)
     const { data: following, error, count } = await supabase
       .from('follows')
-      .select('following_id, profiles!follows_following_id_fkey(id, display_name, avatar_url, bio, email)', {
+      .select('following_id, following_user:profiles!follows_following_id_fkey(id, display_name, avatar_url, bio, email)', {
         count: 'exact',
       })
       .eq('follower_id', userId)
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     // Enrich with follow status for current user
     const enrichedFollowing = await Promise.all(
       following.map(async (follow: any) => {
-        const followingProfile = follow.profiles;
+        const followingProfile = follow.following_user;
 
         // Check if current user follows this person
         const { data: followData } = await supabase

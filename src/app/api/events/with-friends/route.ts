@@ -98,48 +98,56 @@ export async function GET(request: NextRequest) {
     // 3. Raggruppa eventi per ID e raccogli amici partecipanti
     const eventsMap = new Map<string, any>()
     
-    events?.forEach(attendance => {
-      const eventId = attendance.events.id
+    events?.forEach((attendance: any) => {
+      const event = Array.isArray(attendance.events) ? attendance.events[0] : attendance.events
+      const venue = Array.isArray(event?.venues) ? event.venues[0] : event?.venues
+      const profile = Array.isArray(attendance.profiles) ? attendance.profiles[0] : attendance.profiles
+      
+      if (!event) return
+      
+      const eventId = event.id
       
       if (!eventsMap.has(eventId)) {
         eventsMap.set(eventId, {
-          id: attendance.events.id,
-          title: attendance.events.title,
-          description: attendance.events.description,
-          event_type: attendance.events.category,
-          start_datetime: attendance.events.start_datetime,
-          end_datetime: attendance.events.end_datetime,
-          cover_image: attendance.events.cover_image,
-          lineup: attendance.events.lineup,
-          music_genre: attendance.events.music_genre,
-          ticket_price_min: attendance.events.ticket_price_min,
-          ticket_price_max: attendance.events.ticket_price_max,
-          ticket_url: attendance.events.ticket_url,
-          ticket_availability: attendance.events.ticket_availability,
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          event_type: event.category,
+          start_datetime: event.start_datetime,
+          end_datetime: event.end_datetime,
+          cover_image: event.cover_image,
+          lineup: event.lineup,
+          music_genre: event.music_genre,
+          ticket_price_min: event.ticket_price_min,
+          ticket_price_max: event.ticket_price_max,
+          ticket_url: event.ticket_url,
+          ticket_availability: event.ticket_availability,
           place: {
-            id: attendance.events.venues.id,
-            name: attendance.events.venues.name,
-            category: attendance.events.venues.category,
-            address: attendance.events.venues.address,
-            city: attendance.events.venues.city,
-            latitude: parseLocation(attendance.events.venues.location).lat,
-            longitude: parseLocation(attendance.events.venues.location).lng,
-            cover_image: attendance.events.venues.cover_image,
-            price_range: attendance.events.venues.price_range,
-            verified: attendance.events.venues.verified
+            id: venue?.id,
+            name: venue?.name,
+            category: venue?.category,
+            address: venue?.address,
+            city: venue?.city,
+            latitude: parseLocation(venue?.location).lat,
+            longitude: parseLocation(venue?.location).lng,
+            cover_image: venue?.cover_image,
+            price_range: venue?.price_range,
+            verified: venue?.verified
           },
           friends_going: [],
           friend_count: 0
         })
       }
       
-      const event = eventsMap.get(eventId)!
-      event.friends_going.push({
-        id: attendance.profiles.id,
-        display_name: attendance.profiles.display_name,
-        avatar_url: attendance.profiles.avatar_url
-      })
-      event.friend_count = event.friends_going.length
+      const eventData = eventsMap.get(eventId)!
+      if (profile) {
+        eventData.friends_going.push({
+          id: profile.id,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url
+        })
+        eventData.friend_count = eventData.friends_going.length
+      }
     })
 
     const eventsWithFriends = Array.from(eventsMap.values())

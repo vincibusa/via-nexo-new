@@ -109,11 +109,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Build response
-    const conversations = participations.map(p => {
+    const conversations = participations.map((p: any) => {
       const conversation = Array.isArray(p.conversations) ? p.conversations[0] : p.conversations
-      const otherParticipant = otherParticipants?.find(op => op.conversation_id === p.conversation_id)
-      const lastMessage = lastMessages?.find(m => m.conversation_id === p.conversation_id)
-      const unreadData = unreadCounts.find(uc => uc.conversation_id === p.conversation_id)
+      const otherParticipant = otherParticipants?.find((op: any) => op.conversation_id === p.conversation_id)
+      const lastMessage = lastMessages?.find((m: any) => m.conversation_id === p.conversation_id)
+      const unreadData = unreadCounts.find((uc: any) => uc.conversation_id === p.conversation_id)
 
       // Handle profiles as array (Supabase returns arrays for relations)
       const profile = otherParticipant?.profiles 

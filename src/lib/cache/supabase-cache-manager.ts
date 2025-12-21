@@ -245,7 +245,7 @@ export class SupabaseCacheManager<T = any> {
       console.error(`[Supabase Cache] Stats error:`, error)
       return {
         memory: memoryStats,
-        supabase: { error: error.message },
+        supabase: { error: error instanceof Error ? error.message : String(error) },
         combined: { error: 'Failed to get combined stats' }
       }
     }

@@ -36,20 +36,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!bucket || !['place-images', 'event-images', 'avatars'].includes(bucket)) {
+    // Allowed buckets (discovery-videos for videos, place-images/event-images for images)
+    const allowedBuckets = ['place-images', 'event-images', 'avatars', 'discovery-videos']
+    if (!bucket || !allowedBuckets.includes(bucket)) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
     }
 
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    // Validate file type - support both images and videos
+    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    const allowedVideoTypes = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo'] // mp4, mpeg, mov, avi
+    const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes]
+    
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Invalid file type. Only JPEG, PNG, and WebP are allowed' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Invalid file type. Allowed: JPEG, PNG, WebP (images) or MP4, MOV, MPEG, AVI (videos)' 
+      }, { status: 400 })
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024 // 5MB
+    // Validate file size based on file type
+    const isVideo = allowedVideoTypes.includes(file.type)
+    const maxSize = isVideo 
+      ? 100 * 1024 * 1024 // 100MB for videos (as per plan specifications)
+      : 5 * 1024 * 1024   // 5MB for images
+    
     if (file.size > maxSize) {
-      return NextResponse.json({ error: 'File too large. Maximum size is 5MB' }, { status: 400 })
+      const maxSizeMB = Math.round(maxSize / (1024 * 1024))
+      return NextResponse.json({ 
+        error: `File too large. Maximum size is ${maxSizeMB}MB${isVideo ? ' for videos' : ' for images'}` 
+      }, { status: 400 })
     }
 
     // Generate unique filename
