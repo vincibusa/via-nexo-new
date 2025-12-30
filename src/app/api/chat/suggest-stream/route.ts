@@ -16,6 +16,7 @@ import { generateEmbedding } from '@/lib/ai/embedding'
 import { createClient } from '@/lib/supabase/server'
 import { handleCorsPreflight, getCorsHeaders } from '@/lib/cors'
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit'
+import { getUserPreferences, getPreferencesSummary } from '@/lib/ai/user-preferences'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -257,6 +258,12 @@ const chatRequestSchema = z.object({
   }),
   radius_km: z.number().min(0.5).max(50).optional().default(5),
   conversation_id: z.string().uuid().optional(), // ENHANCED: Optional conversation context
+
+  // BOOKING FLOW: Fields for multi-step booking process
+  booking_action: z.enum(['select', 'confirm', 'cancel', 'swipe_complete']).optional(),
+  selected_event_id: z.string().uuid().optional(),
+  booking_intent_id: z.string().uuid().optional(),
+  liked_event_ids: z.array(z.string().uuid()).optional(), // SWIPE: Event IDs user liked
 })
 
 // OTTIMIZZAZIONE: Schema unificato per parameter extraction + response generation
@@ -291,7 +298,7 @@ const unifiedSuggestionSchema = z.object({
     cacheUsed: z.boolean(),
     contextUsed: z.boolean().optional(),
     conversationLength: z.number().optional(),
-  }),
+  }).optional(), // MADE OPTIONAL: AI doesn't always return it, we add it manually
 })
 
 // Schema legacy per backward compatibility
@@ -325,7 +332,7 @@ const chatSuggestionSchema = z.object({
     cacheUsed: z.boolean(),
     contextUsed: z.boolean().optional(),
     conversationLength: z.number().optional(),
-  }),
+  }).optional(), // MADE OPTIONAL: AI doesn't always return it, we add it manually
 })
 
 export async function OPTIONS(request: NextRequest) {
@@ -384,9 +391,22 @@ async function handleChatSuggestStream(request: NextRequest) {
         const startTime = Date.now()
 
         console.log(`[Chat Stream] User message: "${validatedInput.message}"`)
-        
+
         // Get current user for conversation history
         const { data: { user } } = await supabase.auth.getUser()
+
+        // PERSONALIZATION: Fetch learned user preferences for personalized recommendations
+        let learnedUserPreferences = null
+        if (user) {
+          try {
+            learnedUserPreferences = await getUserPreferences(user.id)
+            if (learnedUserPreferences) {
+              console.log(`[Chat Stream] 🎯 User preferences loaded: ${getPreferencesSummary(learnedUserPreferences)}`)
+            }
+          } catch (error) {
+            console.error('[Chat Stream] Error loading user preferences:', error)
+          }
+        }
 
         // ENHANCED: Retrieve and manage conversation history if conversation_id provided
         let conversationHistory: Array<{ content: string; is_user: boolean; timestamp: string }> = []
@@ -414,6 +434,368 @@ async function handleChatSuggestStream(request: NextRequest) {
           console.log(`[Chat Stream] Retrieved ${fullHistory.length} total messages, using ${conversationHistory.length} for context`)
           if (isTopicChange) {
             console.log(`[Chat Stream] 🔄 Topic change detected, using shorter context window`)
+          }
+        }
+
+        // SMART BOOKING: Detect if user is trying to select/confirm from active intent
+        if (user && !validatedInput.booking_action) {
+          // Check for active booking intent
+          const { data: activeIntent } = await supabase
+            .from('chat_booking_intents')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('state', 'awaiting_selection')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          if (activeIntent) {
+            console.log('[Booking Flow] Found active intent:', activeIntent.id)
+
+            // Selection keyword patterns (make "il" optional so "primo", "secondo" match too)
+            const selectionPatterns = [
+              /\b(il\s*)?primo\b/i,
+              /\b(il\s*)?secondo\b/i,
+              /\b(il\s*)?terzo\b/i,
+              /\b(l[''])?ultimo\b/i,
+              /\bsì\b/i,
+              /\bsi\b/i,
+              /\bprenota\b/i,
+              /\bconferma\b/i,
+              /\bok\b/i,
+              /\bprocedi\b/i,
+            ]
+
+            const isSelectionMessage = selectionPatterns.some(p => p.test(validatedInput.message))
+
+            if (isSelectionMessage) {
+              console.log('[Booking Flow] Detected selection message:', validatedInput.message)
+
+              // Parse which event was selected
+              let selectedEventId: string | null = null
+
+              if (/primo/i.test(validatedInput.message)) {
+                selectedEventId = activeIntent.suggested_event_ids?.[0] || null
+              } else if (/secondo/i.test(validatedInput.message)) {
+                selectedEventId = activeIntent.suggested_event_ids?.[1] || null
+              } else if (/terzo/i.test(validatedInput.message)) {
+                selectedEventId = activeIntent.suggested_event_ids?.[2] || null
+              } else if (/ultimo/i.test(validatedInput.message)) {
+                const ids = activeIntent.suggested_event_ids || []
+                selectedEventId = ids[ids.length - 1] || null
+              } else if (/sì|si|ok|conferma|procedi|prenota/i.test(validatedInput.message)) {
+                // If only 1 event OR user confirming, select first
+                selectedEventId = activeIntent.selected_entity_id || activeIntent.suggested_event_ids?.[0] || null
+              }
+
+              if (selectedEventId) {
+                console.log('[Booking Flow] Selected event:', selectedEventId)
+
+                // Validate this is actually an event (not a place!)
+                const { data: eventExists } = await supabase
+                  .from('events')
+                  .select('id, title')
+                  .eq('id', selectedEventId)
+                  .single()
+
+                if (!eventExists) {
+                  console.warn('[Booking Flow] Selected ID is not a valid event:', selectedEventId)
+                  // Skip booking, let it fall through to normal search
+                } else {
+                  // Generate unique QR code token
+                  const qrToken = `RES-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+
+                  // Create actual reservation!
+                  const { data: reservation, error: resError } = await supabase
+                    .from('event_reservations')
+                    .insert({
+                      event_id: selectedEventId,
+                      owner_id: user.id,
+                      qr_code_token: qrToken,
+                      status: 'confirmed',
+                      total_guests: 0
+                    })
+                    .select()
+                    .single()
+
+                  if (resError) {
+                    console.error('[Booking Flow] Error creating reservation:', resError)
+                    const errorEvent = `data: ${JSON.stringify({
+                      type: 'complete',
+                      conversationalResponse: 'Mi dispiace, si è verificato un errore durante la prenotazione. Riprova!',
+                      suggestions: []
+                    })}\n\n`
+                    controller.enqueue(encoder.encode(errorEvent))
+                    controller.close()
+                    return
+                  }
+
+                  // Update intent to confirmed with reservation link
+                  await supabase
+                    .from('chat_booking_intents')
+                    .update({
+                      state: 'confirmed',
+                      selected_entity_type: 'event',
+                      selected_entity_id: selectedEventId,
+                      reservation_id: reservation.id,
+                      confirmed_at: new Date().toISOString()
+                    })
+                    .eq('id', activeIntent.id)
+
+                  console.log(`[Booking Flow] ✅ Created reservation ${reservation.id} for event ${selectedEventId}`)
+
+                  // Return success message
+                  const successEvent = `data: ${JSON.stringify({
+                    type: 'complete',
+                    conversationalResponse: 'Fatto! Evento prenotato con successo. Troverai tutti i dettagli nella schermata evento, dove potrai anche aggiungere ospiti e visualizzare il QR code per l\'ingresso.',
+                    suggestions: [],
+                    bookingConfirmed: true,
+                    reservationId: reservation.id
+                  })}\n\n`
+                  controller.enqueue(encoder.encode(successEvent))
+                  controller.close()
+                  return
+                }
+              }
+            }
+          }
+        }
+
+        // BOOKING FLOW: Handle booking actions if present
+        if (validatedInput.booking_action && user) {
+          console.log(`[Booking Flow] Processing action: ${validatedInput.booking_action}`)
+
+          try {
+            if (validatedInput.booking_action === 'select' && validatedInput.selected_event_id && validatedInput.booking_intent_id) {
+              // User selected an event - update intent to 'selected' state
+              const { data: intent, error: updateError } = await supabase
+                .from('chat_booking_intents')
+                .update({
+                  selected_entity_type: 'event',
+                  selected_entity_id: validatedInput.selected_event_id,
+                  state: 'selected',
+                  selected_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', validatedInput.booking_intent_id)
+                .eq('user_id', user.id)
+                .select()
+                .single()
+
+              if (updateError) {
+                console.error('[Booking Flow] Error updating intent:', updateError)
+              } else {
+                console.log(`[Booking Flow] ✅ Event selected: ${validatedInput.selected_event_id}`)
+
+                // Fetch event details for confirmation message
+                const { data: event } = await supabase
+                  .from('events')
+                  .select('title, start_datetime, place:places(name, address)')
+                  .eq('id', validatedInput.selected_event_id)
+                  .single()
+
+                const place = event?.place 
+                  ? (Array.isArray(event.place) ? event.place[0] : event.place)
+                  : null
+                const placeName = place && typeof place === 'object' && 'name' in place ? place.name : null
+                const confirmMessage = event
+                  ? `Perfetto! Hai scelto "${event.title}" ${placeName ? `presso ${placeName}` : ''}. Vuoi che proceda con la prenotazione?`
+                  : 'Ottima scelta! Vuoi che proceda con la prenotazione?'
+
+                const completeEvent = `data: ${JSON.stringify({
+                  type: 'complete',
+                  conversationalResponse: confirmMessage,
+                  suggestions: [],
+                  bookingIntent: intent,
+                })}\n\n`
+                controller.enqueue(encoder.encode(completeEvent))
+                controller.close()
+                return
+              }
+            } else if (validatedInput.booking_action === 'confirm' && validatedInput.booking_intent_id) {
+              // User confirmed - create the actual reservation
+              const { data: intent } = await supabase
+                .from('chat_booking_intents')
+                .select('*')
+                .eq('id', validatedInput.booking_intent_id)
+                .eq('user_id', user.id)
+                .single()
+
+              if (intent && intent.selected_entity_id && intent.selected_entity_type === 'event') {
+                // Generate QR code token
+                const qrToken = crypto.randomBytes(16).toString('hex')
+
+                // Create reservation (only for owner, no guests as per requirements)
+                const { data: reservation, error: reservationError } = await supabase
+                  .from('event_reservations')
+                  .insert({
+                    event_id: intent.selected_entity_id,
+                    owner_id: user.id,
+                    qr_code_token: qrToken,
+                    status: 'confirmed',
+                    total_guests: 1, // Just the owner
+                  })
+                  .select()
+                  .single()
+
+                if (reservationError) {
+                  console.error('[Booking Flow] Error creating reservation:', reservationError)
+                  const errorMessage = reservationError.message.includes('duplicate') || reservationError.message.includes('unique')
+                    ? 'Hai già una prenotazione per questo evento!'
+                    : 'Si è verificato un errore durante la prenotazione. Riprova!'
+
+                  const errorEvent = `data: ${JSON.stringify({
+                    type: 'complete',
+                    conversationalResponse: errorMessage,
+                    suggestions: [],
+                  })}\n\n`
+                  controller.enqueue(encoder.encode(errorEvent))
+                } else {
+                  // Update intent to completed
+                  await supabase
+                    .from('chat_booking_intents')
+                    .update({
+                      state: 'completed',
+                      reservation_id: reservation.id,
+                      confirmed_at: new Date().toISOString(),
+                      completed_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', validatedInput.booking_intent_id)
+
+                  console.log(`[Booking Flow] ✅ Reservation created: ${reservation.id}`)
+
+                  const successMessage = `🎉 Prenotazione confermata! Ti ho riservato il posto. Riceverai un QR code che potrai mostrare all'ingresso. Puoi aggiungere ospiti dalla schermata dell'evento.`
+
+                  const successEvent = `data: ${JSON.stringify({
+                    type: 'complete',
+                    conversationalResponse: successMessage,
+                    suggestions: [],
+                    reservation: reservation,
+                  })}\n\n`
+                  controller.enqueue(encoder.encode(successEvent))
+                }
+                controller.close()
+                return
+              }
+            } else if (validatedInput.booking_action === 'cancel' && validatedInput.booking_intent_id) {
+              // User cancelled the booking flow
+              await supabase
+                .from('chat_booking_intents')
+                .update({
+                  state: 'cancelled',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', validatedInput.booking_intent_id)
+                .eq('user_id', user.id)
+
+              console.log(`[Booking Flow] ❌ Booking cancelled`)
+
+              const cancelMessage = 'Nessun problema! Se cambi idea, chiedimi pure di cercare altri eventi.'
+
+              const cancelEvent = `data: ${JSON.stringify({
+                type: 'complete',
+                conversationalResponse: cancelMessage,
+                suggestions: [],
+              })}\n\n`
+              controller.enqueue(encoder.encode(cancelEvent))
+              controller.close()
+              return
+            } else if (validatedInput.booking_action === 'swipe_complete' && validatedInput.liked_event_ids && validatedInput.liked_event_ids.length > 0) {
+              // User completed swipe session with liked events
+              console.log(`[Swipe Flow] Processing ${validatedInput.liked_event_ids.length} liked events`)
+              console.log(`[Swipe Flow] IDs received from mobile:`, validatedInput.liked_event_ids)
+
+              // Fetch details of liked events (use LEFT JOIN to handle missing places)
+              const { data: likedEvents, error: eventsError } = await supabase
+                .from('events')
+                .select(`
+                  id,
+                  title,
+                  start_datetime,
+                  place:places(
+                    name,
+                    city
+                  )
+                `)
+                .in('id', validatedInput.liked_event_ids)
+
+              if (eventsError || !likedEvents || likedEvents.length === 0) {
+                console.error('[Swipe Flow] Error fetching liked events:', eventsError, 'IDs:', validatedInput.liked_event_ids)
+
+                // Send proper error response instead of silent close
+                const errorEvent = `data: ${JSON.stringify({
+                  type: 'complete',
+                  conversationalResponse: 'Mi dispiace, non sono riuscito a trovare gli eventi selezionati. Prova a cercare di nuovo!',
+                  suggestions: [],
+                })}\n\n`
+                controller.enqueue(encoder.encode(errorEvent))
+                controller.close()
+                return
+              }
+
+              console.log(`[Swipe Flow] Fetched ${likedEvents.length} of ${validatedInput.liked_event_ids.length} events from database`)
+
+              // Log any missing events for debugging
+              if (likedEvents.length < validatedInput.liked_event_ids.length) {
+                const fetchedIds = likedEvents.map((e: any) => e.id)
+                const missingIds = validatedInput.liked_event_ids.filter(id => !fetchedIds.includes(id))
+                console.warn(`[Swipe Flow] MISSING EVENTS - not found in database:`, missingIds)
+              }
+
+              // Generate recap message
+              let recapMessage = ''
+
+              if (likedEvents.length === 1) {
+                const event = likedEvents[0]
+                recapMessage = `Ti è piaciuto "${event.title}"!\n\nVuoi che proceda con la prenotazione per questo evento?`
+              } else {
+                const eventList = likedEvents
+                  .map((e: any, i: number) => {
+                    const place = e.place 
+                      ? (Array.isArray(e.place) ? e.place[0] : e.place)
+                      : null
+                    const placeName = place && typeof place === 'object' && 'name' in place ? place.name : null
+                    return `${i + 1}. ${e.title}${placeName ? ` @ ${placeName}` : ''}`
+                  })
+                  .join('\n')
+                recapMessage = `Ottimo! Ti sono piaciuti questi eventi:\n\n${eventList}\n\nQuale di questi vuoi prenotare? Dimmi pure "il primo", "il secondo", o il nome dell'evento!`
+              }
+
+              // Filter to only actual event IDs (likedEvents was fetched from events table)
+              // This excludes any place IDs that were accidentally included
+              const actualEventIds = likedEvents.map((e: any) => e.id)
+
+              // Create new booking intent for liked events
+              const { data: newIntent, error: intentError } = await supabase
+                .from('chat_booking_intents')
+                .insert({
+                  conversation_id: validatedInput.conversation_id || null,
+                  user_id: user.id,
+                  suggested_event_ids: actualEventIds,
+                  state: 'awaiting_selection'
+                })
+                .select()
+                .single()
+
+              if (intentError) {
+                console.error('[Swipe Flow] Error creating booking intent:', intentError)
+              } else {
+                console.log(`[Swipe Flow] Created booking intent: ${newIntent.id}`)
+              }
+
+              const swipeCompleteEvent = `data: ${JSON.stringify({
+                type: 'complete',
+                conversationalResponse: recapMessage,
+                suggestions: [],
+                bookingIntentId: newIntent?.id,
+              })}\n\n`
+              controller.enqueue(encoder.encode(swipeCompleteEvent))
+              controller.close()
+              return
+            }
+          } catch (error) {
+            console.error('[Booking Flow] Unexpected error:', error)
           }
         }
 
@@ -506,11 +888,11 @@ Usa SOLO questi tre valori esatti, senza caratteri speciali.`,
 
         // Convert extracted params to SuggestionContext with proper defaults
         let context: SuggestionContext = {
-          companionship: (extractedParams.companionship && extractedParams.companionship.length > 0) 
-            ? extractedParams.companionship[0] 
+          companionship: (extractedParams.companionship && extractedParams.companionship.length > 0)
+            ? extractedParams.companionship[0]
             : 'alone',
-          mood: (extractedParams.mood && extractedParams.mood.length > 0) 
-            ? extractedParams.mood[0] 
+          mood: (extractedParams.mood && extractedParams.mood.length > 0)
+            ? extractedParams.mood[0]
             : 'relaxed',
           budget: extractedParams.budget || '€€',
           time: extractedParams.time === 'now' || extractedParams.time === 'tonight' || extractedParams.time === 'weekend'
@@ -518,9 +900,10 @@ Usa SOLO questi tre valori esatti, senza caratteri speciali.`,
             : extractedParams.time || 'evening',
           location: validatedInput.location,
           radius_km: validatedInput.radius_km,
-          preferences: (extractedParams.keywords && extractedParams.keywords.length > 0) 
-            ? extractedParams.keywords 
+          preferences: (extractedParams.keywords && extractedParams.keywords.length > 0)
+            ? extractedParams.keywords
             : undefined,
+          userPreferences: learnedUserPreferences || undefined, // Add learned user preferences
         }
 
         // ENHANCED: Apply user preferences to fill in missing parameters
@@ -819,9 +1202,10 @@ ${optionsList}
 ISTRUZIONI CRITICHE:
 - ESTRAI: companionship[], mood[], budget(€/€€/€€€), time, keywords[].
 - RISPONDI: conversationalResponse(max150char), suggestions(1-3 dalla lista), searchMetadata.
-- ⚠️ OBBLIGATORIO: Nel campo "id" di ogni suggestion, usa SOLO l'UUID completo (es: "a89487c5-01af-4882-abe5-9cf7b7726b68").
+- ⚠️ OBBLIGATORIO UUID: Nel campo "id" di ogni suggestion, usa SOLO l'UUID completo (es: "a89487c5-01af-4882-abe5-9cf7b7726b68").
 - ❌ NON usare mai il nome nel campo "id" - solo l'UUID dalla colonna "ID:" sopra.
-- ✅ Esempio corretto: {"id": "a89487c5-01af-4882-abe5-9cf7b7726b68", "type": "place", ...}
+- ⚠️ OBBLIGATORIO TYPE: Nel campo "type", imposta "event" per eventi (concert/exhibition/show) o "place" per locali (restaurant/bar/cafe).
+- ✅ Esempio corretto: {"id": "a89487c5-01af-4882-abe5-9cf7b7726b68", "type": "event", ...}
 - ❌ Esempio ERRATO: {"id": "Caffè del Kassaro", "type": "place", ...}`
         // OTTIMIZZAZIONE: UNIFIED LLM Call - Nessuna doppia latenza!
         console.log(`[DEBUG] Starting UNIFIED LLM generation...`)
@@ -960,14 +1344,73 @@ ISTRUZIONI CRITICHE:
             
             console.log(`[Chat Stream] Final suggestions count: ${object?.suggestions?.length || 0}`)
 
-            // Add metadata
+            // BOOKING FLOW: Create booking intent if there are event suggestions
+            let bookingIntentId: string | null = null
+            console.log(`[Booking Flow] Checking conditions - user:`, !!user, `user.id:`, user?.id, `suggestions:`, object?.suggestions?.length)
+
+            // DEBUG: Log suggestion details for troubleshooting
+            if (object?.suggestions?.length > 0) {
+              console.log(`[Booking Flow] All suggestions:`, object.suggestions.map((s: any) => ({
+                id: s.id,
+                type: s.type,
+                _isEvent: s._isEvent,
+                event_type: s.event_type
+              })))
+            }
+
+            if (user && object?.suggestions?.length > 0) {
+              // Check if any suggestions are events (have _isEvent flag or are from events table)
+              const eventSuggestions = object.suggestions.filter((s: any) =>
+                s.type === 'event' || s._isEvent || s.event_type
+              )
+              console.log(`[Booking Flow] Found ${eventSuggestions.length} event suggestions out of ${object.suggestions.length} total`)
+
+              if (eventSuggestions.length === 0) {
+                console.warn(`[Booking Flow] ⚠️ No event suggestions found! All suggestions have type='place'. This prevents booking intent creation.`)
+                console.warn(`[Booking Flow] Suggestion types:`, object.suggestions.map((s: any) => s.type))
+              }
+
+              if (eventSuggestions.length > 0) {
+                try {
+                  const eventIds = eventSuggestions.map((s: any) => s.placeId || s.eventId || s.id)
+
+                  // Create booking intent (conversation_id can be null for new chats)
+                  const { data: intent, error: intentError } = await supabase
+                    .from('chat_booking_intents')
+                    .insert({
+                      conversation_id: validatedInput.conversation_id || null,
+                      user_id: user.id,
+                      suggested_event_ids: eventIds,
+                      state: 'awaiting_selection',
+                    })
+                    .select()
+                    .single()
+
+                  if (!intentError && intent) {
+                    bookingIntentId = intent.id
+                    console.log(`[Booking Flow] ✅ Created booking intent: ${bookingIntentId} for ${eventSuggestions.length} events`)
+                  } else {
+                    console.error('[Booking Flow] Error creating intent:', intentError)
+                  }
+                } catch (error) {
+                  console.error('[Booking Flow] Error creating booking intent:', error)
+                }
+              }
+            }
+
+            // Add metadata (provide defaults if AI didn't return searchMetadata)
             const finalResponse = {
               ...object,
               searchMetadata: {
-                ...object?.searchMetadata,
+                totalCandidates: object?.searchMetadata?.totalCandidates || totalCandidates,
+                totalPlaces: object?.searchMetadata?.totalPlaces || placesForLLM.length,
+                totalEvents: object?.searchMetadata?.totalEvents || eventsForLLM.length,
+                processingTime: object?.searchMetadata?.processingTime || Math.round(Date.now() - startTime),
+                cacheUsed: object?.searchMetadata?.cacheUsed !== undefined ? object.searchMetadata.cacheUsed : cacheUsed,
                 contextUsed: !!conversationContext,
                 conversationLength: conversationHistory.length,
-              }
+              },
+              bookingIntentId: bookingIntentId, // Add booking intent ID if created
             }
 
             // Send final complete event
@@ -976,6 +1419,8 @@ ISTRUZIONI CRITICHE:
               ...finalResponse
             })}\n\n`
             console.log(`[DEBUG] Sending complete event with ${finalResponse?.suggestions?.length || 0} suggestions`)
+            console.log(`[DEBUG] finalResponse.bookingIntentId:`, finalResponse.bookingIntentId)
+            console.log(`[DEBUG] Complete event includes bookingIntentId:`, JSON.parse(completeEvent.replace('data: ', '').trim()).bookingIntentId)
             controller.enqueue(encoder.encode(completeEvent))
 
             // Cache the result if not already cached and validation succeeded (fire and forget)

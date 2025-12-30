@@ -3,7 +3,7 @@
  * PERFORMANCE: Integrazione cache in-memory con persistenza Supabase
  */
 
-import { getReadOnlyClient, getBatchClient } from '@/lib/supabase/connection-pool'
+import { getReadOnlyClient, getBatchClient, getServiceClient } from '@/lib/supabase/connection-pool'
 import { EnhancedCacheManager } from './enhanced-cache-manager'
 import { cacheMetrics } from './cache-metrics'
 
@@ -254,12 +254,12 @@ export class SupabaseCacheManager<T = any> {
   // Private methods
 
   private async setInSupabase(
-    key: string, 
-    data: T, 
-    expiresAt: Date, 
+    key: string,
+    data: T,
+    expiresAt: Date,
     options: any
   ): Promise<void> {
-    const supabase = await getBatchClient()
+    const supabase = getServiceClient()  // Use service role to bypass RLS
     
     let insertData: any = {
       cache_key: key,

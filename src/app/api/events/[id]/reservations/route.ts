@@ -1,7 +1,6 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { createClient } from '@/lib/supabase/server';
 import { createNotification } from '@/lib/services/notifications';
 
 function generateQRToken(): string {
@@ -68,17 +67,7 @@ export async function GET(
     const limit = parseInt(searchParams.get('limit') || '20');
     const status = searchParams.get('status') as string || undefined;
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -158,17 +147,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -179,7 +158,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { guest_ids = [], notes } = body;
+    const { guest_ids = [], notes, wants_group_chat = false } = body;
 
     // Log for debugging
     console.log('[Reservations] Creating reservation:', {
@@ -309,6 +288,7 @@ export async function POST(
         qr_code_token,
         total_guests: 1,
         notes,
+        wants_group_chat,
       })
       .select('*')
       .single();
@@ -319,6 +299,31 @@ export async function POST(
         { error: 'Failed to create reservation' },
         { status: 500 }
       );
+    }
+
+    // Handle event group chat if user wants to join
+    if (wants_group_chat) {
+      try {
+        // Create or get event group chat
+        const { data: conversationId, error: chatError } = await supabase.rpc(
+          'create_or_get_event_group_chat',
+          {
+            p_event_id: id,
+            p_user_id: user.id,
+          }
+        );
+
+        if (!chatError && conversationId) {
+          // Add user to the chat
+          await supabase.rpc('add_user_to_event_group_chat', {
+            p_event_id: id,
+            p_user_id: user.id,
+          });
+        }
+      } catch (chatError) {
+        console.error('Error creating/joining event group chat:', chatError);
+        // Don't fail the reservation if chat creation fails
+      }
     }
 
     // Create separate reservations for each guest using RPC function

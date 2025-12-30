@@ -25,15 +25,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user_id from query params if provided
+    // Get query params
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
+    const includeExpired = searchParams.get('include_expired') === 'true';
 
     // Build query
     let query = supabase
       .from('stories')
-      .select('id, user_id, media_url, media_type, text_overlay, place_id, created_at, expires_at, profiles(id, display_name, avatar_url)')
-      .gt('expires_at', new Date().toISOString());
+      .select('id, user_id, media_url, media_type, text_overlay, place_id, created_at, expires_at, profiles(id, display_name, avatar_url)');
+
+    // Filter by expiration unless include_expired is true
+    if (!includeExpired) {
+      query = query.gt('expires_at', new Date().toISOString());
+    }
 
     // Filter by user_id if provided
     if (userId) {

@@ -10,6 +10,7 @@ import { geoCache, apiCache } from '@/lib/cache/enhanced-cache-manager'
 import { geoClusterCache, apiClusterCache } from '@/lib/cache/cluster-memory-manager'
 import { cacheMetrics, cacheProfiler } from '@/lib/cache/cache-metrics'
 import { hybridGeoCache, hybridApiCache } from '@/lib/cache/supabase-cache-manager'
+import { UserPreferences } from './user-preferences'
 
 // ENHANCED: Advanced cache system replacing simple Map
 const GEO_CACHE_TTL = 10 * 60 * 1000 // 10 minutes (geo data changes slowly)
@@ -98,6 +99,7 @@ export interface SuggestionContext {
   radius_km?: number
   preferences?: string[]
   datetime?: string // ISO datetime for event filtering
+  userPreferences?: UserPreferences // Learned user preferences for personalization
 }
 
 /**
@@ -268,6 +270,23 @@ export function buildSemanticQuery(context: SuggestionContext): string {
     parts.push(`preferenze: ${context.preferences.join(', ')}`)
   }
 
+  // Add learned user preferences if confidence is high enough (>30%)
+  if (context.userPreferences && context.userPreferences.preferenceConfidence > 30) {
+    const prefs = context.userPreferences
+
+    // Add preferred event types (top 3)
+    if (prefs.preferredEventTypes.length > 0) {
+      const topEventTypes = prefs.preferredEventTypes.slice(0, 3).join(', ')
+      parts.push(`eventi preferiti: ${topEventTypes}`)
+    }
+
+    // Add preferred genres (top 3)
+    if (prefs.preferredGenres.length > 0) {
+      const topGenres = prefs.preferredGenres.slice(0, 3).join(', ')
+      parts.push(`generi preferiti: ${topGenres}`)
+    }
+  }
+
   return parts.join(', ')
 }
 
@@ -425,6 +444,28 @@ export async function reRank(
     // FAST: Budget match
     if (context.budget && place.price_range === context.budget) {
       score += 0.15
+    }
+
+    // USER PREFERENCES: Boost places matching learned preferences (if confidence > 30%)
+    if (context.userPreferences && context.userPreferences.preferenceConfidence > 30) {
+      const confidenceFactor = context.userPreferences.preferenceConfidence / 100
+
+      // Boost for matching place type
+      if (context.userPreferences.preferredPlaceTypes.includes(place.place_type)) {
+        score += 0.2 * confidenceFactor
+      }
+
+      // Boost for matching ambience tags
+      if (place.ambience_tags && place.ambience_tags.some((tag: string) =>
+        context.userPreferences!.preferredAmbiences.includes(tag))) {
+        score += 0.15 * confidenceFactor
+      }
+
+      // Boost for matching music genres
+      if (place.music_genre && place.music_genre.some((genre: string) =>
+        context.userPreferences!.preferredMusicGenres.includes(genre))) {
+        score += 0.1 * confidenceFactor
+      }
     }
 
     return {
@@ -868,6 +909,22 @@ export async function reRankEvents(
       const maxBudget = budgetRanges[context.budget]
       if (event.ticket_price_min <= maxBudget) {
         score += 0.1
+      }
+    }
+
+    // USER PREFERENCES: Boost events matching learned preferences (if confidence > 30%)
+    if (context.userPreferences && context.userPreferences.preferenceConfidence > 30) {
+      const confidenceFactor = context.userPreferences.preferenceConfidence / 100
+
+      // Boost for matching event type
+      if (event.event_type && context.userPreferences.preferredEventTypes.includes(event.event_type)) {
+        score += 0.2 * confidenceFactor
+      }
+
+      // Boost for matching genres
+      if (event.genre && event.genre.some((genre: string) =>
+        context.userPreferences!.preferredGenres.includes(genre))) {
+        score += 0.15 * confidenceFactor
       }
     }
 

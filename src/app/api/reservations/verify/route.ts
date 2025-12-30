@@ -1,23 +1,25 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
+
+    // Check authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('[Verify QR] Auth check:', { userId: user?.id, authError: authError?.message });
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     const body = await request.json();
     const { qr_code_token } = body;
+
+    console.log('[Verify QR] Token received:', qr_code_token);
 
     if (!qr_code_token) {
       return NextResponse.json(
@@ -44,14 +46,20 @@ export async function POST(request: NextRequest) {
           start_datetime,
           cover_image_url
         ),
-        owner:profiles(id, display_name, avatar_url)
+        owner:profiles!event_reservations_owner_id_fkey(id, display_name, avatar_url)
       `)
       .eq('qr_code_token', qr_code_token)
       .single();
 
+    console.log('[Verify QR] Query result:', {
+      found: !!reservation,
+      error: error?.message,
+      errorCode: error?.code
+    });
+
     if (error || !reservation) {
       return NextResponse.json(
-        { error: 'Invalid QR code' },
+        { error: 'Invalid QR code', details: error?.message },
         { status: 404 }
       );
     }

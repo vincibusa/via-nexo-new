@@ -101,10 +101,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get reservation to check ownership
+    // Get reservation to check ownership and event_id
     const { data: reservation } = await supabase
       .from('event_reservations')
-      .select('owner_id')
+      .select('owner_id, event_id')
       .eq('id', id)
       .single();
 
@@ -113,6 +113,38 @@ export async function DELETE(
         { error: 'Unauthorized' },
         { status: 403 }
       );
+    }
+
+    // Get all guests for this reservation
+    const { data: guests } = await supabase
+      .from('reservation_guests')
+      .select('guest_id')
+      .eq('reservation_id', id);
+
+    // Remove owner from event group chat (if exists)
+    try {
+      await supabase.rpc('remove_user_from_event_group_chat', {
+        p_event_id: reservation.event_id,
+        p_user_id: reservation.owner_id,
+      });
+    } catch (chatError) {
+      console.error('Error removing owner from chat:', chatError);
+      // Don't fail deletion if chat removal fails
+    }
+
+    // Remove all guests from event group chat
+    if (guests && guests.length > 0) {
+      for (const guest of guests) {
+        try {
+          await supabase.rpc('remove_user_from_event_group_chat', {
+            p_event_id: reservation.event_id,
+            p_user_id: guest.guest_id,
+          });
+        } catch (chatError) {
+          console.error('Error removing guest from chat:', chatError);
+          // Don't fail deletion if chat removal fails
+        }
+      }
     }
 
     // Delete reservation (cascade will handle guests)

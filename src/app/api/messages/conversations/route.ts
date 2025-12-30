@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
         is_muted,
         conversations (
           id,
+          type,
+          title,
+          is_group,
           created_at,
           updated_at,
           last_message_at
@@ -108,6 +111,38 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching unread counts:', unreadError)
     }
 
+    // Get event images for group chats
+    const groupConversationIds = participations
+      .filter((p: any) => {
+        const conv = Array.isArray(p.conversations) ? p.conversations[0] : p.conversations
+        return conv?.type === 'group' || conv?.is_group
+      })
+      .map((p: any) => p.conversation_id)
+
+    let eventImages: Record<string, string> = {}
+    if (groupConversationIds.length > 0) {
+      const { data: eventGroupChats, error: eventGroupChatsError } = await supabase
+        .from('event_group_chats')
+        .select(`
+          conversation_id,
+          events (
+            cover_image_url
+          )
+        `)
+        .in('conversation_id', groupConversationIds)
+
+      if (eventGroupChatsError) {
+        console.error('Error fetching event group chats:', eventGroupChatsError)
+      } else if (eventGroupChats) {
+        eventGroupChats.forEach((egc: any) => {
+          const event = Array.isArray(egc.events) ? egc.events[0] : egc.events
+          if (event?.cover_image_url) {
+            eventImages[egc.conversation_id] = event.cover_image_url
+          }
+        })
+      }
+    }
+
     // Build response
     const conversations = participations.map((p: any) => {
       const conversation = Array.isArray(p.conversations) ? p.conversations[0] : p.conversations
@@ -122,6 +157,9 @@ export async function GET(request: NextRequest) {
 
       return {
         id: conversation?.id,
+        type: conversation?.type || 'direct',
+        title: conversation?.title || null,
+        is_group: conversation?.is_group || false,
         created_at: conversation?.created_at,
         updated_at: conversation?.updated_at,
         last_message_at: conversation?.last_message_at,
@@ -140,6 +178,7 @@ export async function GET(request: NextRequest) {
         } : null,
         unread_count: unreadData?.unread_count || 0,
         is_muted: p.is_muted,
+        group_image_url: eventImages[p.conversation_id] || null,
       }
     })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -28,8 +28,10 @@ interface ManagerRequest {
   }
 }
 
-export default function ManagerRequestDetailPage({ params }: { params: { id: string } }) {
+export default function ManagerRequestDetailPage() {
   const router = useRouter()
+  const params = useParams()
+  const requestId = params.id as string
   const [request, setRequest] = useState<ManagerRequest | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -37,11 +39,11 @@ export default function ManagerRequestDetailPage({ params }: { params: { id: str
 
   useEffect(() => {
     fetchRequest()
-  }, [params.id])
+  }, [requestId])
 
   const fetchRequest = async () => {
     try {
-      const response = await fetch(`/api/admin/manager-requests/${params.id}`)
+      const response = await fetch(`/api/admin/manager-requests/${requestId}`)
       if (response.ok) {
         const data = await response.json()
         setRequest(data)
@@ -59,7 +61,7 @@ export default function ManagerRequestDetailPage({ params }: { params: { id: str
 
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/admin/manager-requests/${params.id}/approve`, {
+      const response = await fetch(`/api/admin/manager-requests/${requestId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review_notes: reviewNotes }),
@@ -90,7 +92,7 @@ export default function ManagerRequestDetailPage({ params }: { params: { id: str
 
     setActionLoading(true)
     try {
-      const response = await fetch(`/api/admin/manager-requests/${params.id}/reject`, {
+      const response = await fetch(`/api/admin/manager-requests/${requestId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review_notes: reviewNotes }),

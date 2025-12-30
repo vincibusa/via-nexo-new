@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { embedPlace } from '@/lib/jobs/embedding-job'
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,22 +36,17 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    // Build query - only manager's own places
+    // Build query - all published and approved places for managers to choose from
     let query = supabase
       .from('places')
       .select('*', { count: 'exact' })
-      .eq('manager_id', user.id)
-      .order('created_at', { ascending: false })
+      .eq('is_published', true)
+      .eq('verification_status', 'approved')
+      .order('name', { ascending: true })
 
     // Apply filters
     if (search) {
       query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%,city.ilike.%${search}%`)
-    }
-
-    if (filter === 'published') {
-      query = query.eq('is_published', true)
-    } else if (filter === 'unpublished') {
-      query = query.eq('is_published', false)
     }
 
     if (category !== 'all') {
@@ -92,72 +86,5 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-
-    // Check if user is manager
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'manager') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    const body = await request.json()
-
-    // Auto-set manager_id and default values
-    const placeData = {
-      ...body,
-      manager_id: user.id,
-      verification_status: 'pending',
-      embeddings_status: 'pending',
-    }
-
-    const { data: place, error } = await supabase
-      .from('places')
-      .insert(placeData)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating place:', error)
-      return NextResponse.json(
-        { error: 'Failed to create place' },
-        { status: 500 }
-      )
-    }
-
-    // Trigger automatic embedding if published and listed
-    if (place.is_published && place.is_listed) {
-      try {
-        console.log(`[Manager API] Triggering embedding for new place ${place.id}`)
-        await embedPlace(place.id, supabase)
-      } catch (embedError) {
-        console.error('Error embedding place after creation:', embedError)
-        // Don't fail the request, just log the error
-        // Status will remain 'pending' and can be retried later
-      }
-    }
-
-    return NextResponse.json({ place }, { status: 201 })
-  } catch (error) {
-    console.error('Error in create place API:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+// POST removed - managers don't create places, only events
+// Place creation is handled by admins through the admin panel

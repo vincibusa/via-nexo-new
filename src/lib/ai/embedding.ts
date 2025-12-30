@@ -158,6 +158,10 @@ export async function storeEmbeddings(
 ): Promise<void> {
   const supabase = supabaseClient || await createClient()
 
+  // Get current user for owner_id (required by RLS policy)
+  const { data: { user } } = await supabase.auth.getUser()
+  const ownerId = user?.id
+
   // Delete existing embeddings for this resource
   await supabase
     .from('embeddings')
@@ -165,10 +169,11 @@ export async function storeEmbeddings(
     .eq('entity_type', resourceType)
     .eq('entity_id', resourceId)
 
-  // Insert new embeddings
+  // Insert new embeddings with owner_id for RLS
   const embeddingsData = chunks.map((chunk, index) => ({
     entity_type: resourceType,
     entity_id: resourceId,
+    owner_id: ownerId,
     chunk_id: index,
     field_name: 'content',
     snippet_text: chunk,
