@@ -17,6 +17,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 100);
+    const includePast = searchParams.get('include_past') !== 'false'; // Default true
 
     // Fetch user's reservations with event and place details
     // NOTE: qr_code_token is intentionally excluded for security - external users should not see QR codes
@@ -63,9 +64,18 @@ export async function GET(
       );
     }
 
+    // Filter out past events if include_past is false
+    let filteredReservations = reservations || [];
+    if (!includePast) {
+      const now = new Date().toISOString();
+      filteredReservations = filteredReservations.filter((reservation: any) => {
+        return reservation.events?.start_datetime && reservation.events.start_datetime >= now;
+      });
+    }
+
     // Transform the data to match the expected format
     // NOTE: qr_code_token and notes are excluded for privacy/security
-    const formattedReservations = reservations?.map((reservation: any) => ({
+    const formattedReservations = filteredReservations.map((reservation: any) => ({
       id: reservation.id,
       event_id: reservation.event_id,
       owner_id: reservation.owner_id,
@@ -97,7 +107,7 @@ export async function GET(
 
     return NextResponse.json({
       reservations: formattedReservations,
-      total: reservations?.length || 0,
+      total: formattedReservations.length,
     });
   } catch (error) {
     console.error('Error in GET /api/reservations/user/[userId]:', error);

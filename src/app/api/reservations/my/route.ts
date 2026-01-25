@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const offset = parseInt(searchParams.get('offset') || '0');
     const limit = parseInt(searchParams.get('limit') || '20');
+    const includePast = searchParams.get('include_past') !== 'false'; // Default true
 
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all reservations where user is the owner
+    // include_past defaults to true, so we show all events by default
     const { data: reservations, error } = await supabase
       .from('event_reservations')
       .select(`
@@ -47,6 +49,15 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
+    // Filter out past events if include_past is false
+    let filteredReservations = reservations || [];
+    if (!includePast) {
+      const now = new Date().toISOString();
+      filteredReservations = filteredReservations.filter((reservation: any) => {
+        return reservation.event?.start_datetime && reservation.event.start_datetime >= now;
+      });
+    }
+
     if (error) {
       console.error('Error fetching reservations:', error);
       return NextResponse.json(
@@ -55,7 +66,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ reservations: reservations || [] });
+    return NextResponse.json({ reservations: filteredReservations });
   } catch (error) {
     console.error('Get my reservations error:', error);
     return NextResponse.json(

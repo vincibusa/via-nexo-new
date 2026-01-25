@@ -42,6 +42,12 @@ interface EventForm {
   is_published: boolean
   is_listed: boolean
   is_cancelled: boolean
+  prive_enabled: boolean
+  prive_min_price: number | null
+  prive_max_seats: number | null
+  prive_deposit_required: number | null
+  prive_total_capacity: number | null
+  capacity: number | null
 }
 
 interface Place {
@@ -75,6 +81,12 @@ export default function NewEventPage() {
     is_published: false,
     is_listed: true,
     is_cancelled: false,
+    prive_enabled: false,
+    prive_min_price: null,
+    prive_max_seats: 10,
+    prive_deposit_required: null,
+    prive_total_capacity: 50,
+    capacity: null,
   })
 
   useEffect(() => {
@@ -156,11 +168,12 @@ export default function NewEventPage() {
         </div>
 
         <Tabs defaultValue="info" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-1 h-auto p-1">
             <TabsTrigger value="info" className="text-xs sm:text-sm p-2">Info</TabsTrigger>
             <TabsTrigger value="images" className="text-xs sm:text-sm p-2">Foto</TabsTrigger>
             <TabsTrigger value="datetime" className="text-xs sm:text-sm p-2">Data/Ora</TabsTrigger>
             <TabsTrigger value="tickets" className="text-xs sm:text-sm p-2">Biglietti</TabsTrigger>
+            <TabsTrigger value="prive" className="text-xs sm:text-sm p-2">Privé</TabsTrigger>
             <TabsTrigger value="details" className="text-xs sm:text-sm p-2">Dettagli</TabsTrigger>
             <TabsTrigger value="status" className="text-xs sm:text-sm p-2">Stato</TabsTrigger>
           </TabsList>
@@ -372,6 +385,118 @@ export default function NewEventPage() {
                     inputMode="url"
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="prive" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configurazione Pista/Privé</CardTitle>
+                <CardDescription>Imposta capacità e opzioni per prenotazioni pista e tavoli VIP</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="capacity">Posti Disponibili Pista</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    step="1"
+                    value={form.capacity ?? ''}
+                    onChange={(e) => setForm({ ...form, capacity: e.target.value ? parseInt(e.target.value, 10) : null })}
+                    placeholder="100"
+                    className="min-h-[44px]"
+                    inputMode="numeric"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Numero massimo di posti disponibili per la pista (lista nominativa)
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="prive_enabled"
+                    checked={form.prive_enabled}
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, prive_enabled: checked as boolean })
+                    }
+                  />
+                  <Label htmlFor="prive_enabled" className="cursor-pointer">
+                    Abilita distinzione Pista/Privé
+                  </Label>
+                </div>
+
+                {form.prive_enabled && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_total_capacity">Posti Totali Privé</Label>
+                      <Input
+                        id="prive_total_capacity"
+                        type="number"
+                        step="1"
+                        value={form.prive_total_capacity ?? ''}
+                        onChange={(e) => setForm({ ...form, prive_total_capacity: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        placeholder="50"
+                        className="min-h-[44px]"
+                        inputMode="numeric"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Numero totale di posti disponibili per i tavoli privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_max_seats">Posti Massimi per Tavolo</Label>
+                      <Input
+                        id="prive_max_seats"
+                        type="number"
+                        step="1"
+                        value={form.prive_max_seats ?? ''}
+                        onChange={(e) => setForm({ ...form, prive_max_seats: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        placeholder="10"
+                        className="min-h-[44px]"
+                        inputMode="numeric"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Numero massimo di persone per tavolo privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_min_price">Prezzo Minimo Tavolo (€)</Label>
+                      <Input
+                        id="prive_min_price"
+                        type="number"
+                        step="0.01"
+                        value={form.prive_min_price ?? ''}
+                        onChange={(e) => setForm({ ...form, prive_min_price: e.target.value ? parseFloat(e.target.value) : null })}
+                        placeholder="100.00"
+                        className="min-h-[44px]"
+                        inputMode="decimal"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Prezzo minimo richiesto per prenotare un tavolo privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_deposit_required">Deposito Richiesto (€)</Label>
+                      <Input
+                        id="prive_deposit_required"
+                        type="number"
+                        step="0.01"
+                        value={form.prive_deposit_required ?? ''}
+                        onChange={(e) => setForm({ ...form, prive_deposit_required: e.target.value ? parseFloat(e.target.value) : null })}
+                        placeholder="50.00"
+                        className="min-h-[44px]"
+                        inputMode="decimal"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Deposito richiesto al momento della prenotazione (opzionale)
+                      </p>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

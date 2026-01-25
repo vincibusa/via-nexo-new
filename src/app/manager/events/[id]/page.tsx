@@ -46,6 +46,12 @@ interface Event {
   is_cancelled: boolean
   embeddings_status: string
   place_id: string
+  prive_enabled?: boolean
+  prive_min_price?: number | null
+  prive_max_seats?: number | null
+  prive_deposit_required?: number | null
+  prive_total_capacity?: number | null
+  capacity?: number | null
   place: {
     id: string
     name: string
@@ -78,7 +84,22 @@ export default function EventEditPage() {
       const response = await fetch(`/api/manager/events/${eventId}`)
       if (response.ok) {
         const data = await response.json()
-        setEvent(data.event)
+        // Initialize Prive fields with defaults if they don't exist
+        const eventData: Event = {
+          ...data.event,
+          prive_enabled: data.event.prive_enabled ?? false,
+          prive_min_price: data.event.prive_min_price ?? null,
+          prive_max_seats: data.event.prive_max_seats ?? 10,
+          prive_deposit_required: data.event.prive_deposit_required ?? null,
+          prive_total_capacity: data.event.prive_total_capacity ?? 50,
+          capacity: data.event.capacity ?? null,
+        }
+        console.log('[Event Edit] Loaded event with Prive fields:', {
+          prive_enabled: eventData.prive_enabled,
+          prive_total_capacity: eventData.prive_total_capacity,
+          capacity: eventData.capacity,
+        })
+        setEvent(eventData)
       } else {
         toast.error('Errore nel caricamento dell\'evento')
         router.push('/manager/events')
@@ -188,11 +209,12 @@ export default function EventEditPage() {
         </div>
 
         <Tabs defaultValue="info" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-1 h-auto p-1">
             <TabsTrigger value="info" className="text-xs sm:text-sm p-2">Info</TabsTrigger>
             <TabsTrigger value="images" className="text-xs sm:text-sm p-2">Foto</TabsTrigger>
             <TabsTrigger value="datetime" className="text-xs sm:text-sm p-2">Data/Ora</TabsTrigger>
             <TabsTrigger value="tickets" className="text-xs sm:text-sm p-2">Biglietti</TabsTrigger>
+            <TabsTrigger value="prive" className="text-xs sm:text-sm p-2">Privé</TabsTrigger>
             <TabsTrigger value="details" className="text-xs sm:text-sm p-2">Dettagli</TabsTrigger>
             <TabsTrigger value="status" className="text-xs sm:text-sm p-2">Stato</TabsTrigger>
           </TabsList>
@@ -379,6 +401,113 @@ export default function EventEditPage() {
                     className="min-h-[44px]"
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="prive" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configurazione Pista/Privé</CardTitle>
+                <CardDescription>Imposta capacità e opzioni per prenotazioni pista e tavoli VIP</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="capacity">Posti Disponibili Pista</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    step="1"
+                    value={event.capacity ?? ''}
+                    onChange={(e) => setEvent({ ...event, capacity: e.target.value ? parseInt(e.target.value, 10) : null })}
+                    placeholder="100"
+                    className="min-h-[44px]"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Numero massimo di posti disponibili per la pista (lista nominativa)
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="prive_enabled"
+                    checked={event.prive_enabled || false}
+                    onCheckedChange={(checked) =>
+                      setEvent({ ...event, prive_enabled: checked as boolean })
+                    }
+                  />
+                  <Label htmlFor="prive_enabled" className="cursor-pointer">
+                    Abilita distinzione Pista/Privé
+                  </Label>
+                </div>
+
+                {event.prive_enabled && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_total_capacity">Posti Totali Privé</Label>
+                      <Input
+                        id="prive_total_capacity"
+                        type="number"
+                        step="1"
+                        value={event.prive_total_capacity ?? ''}
+                        onChange={(e) => setEvent({ ...event, prive_total_capacity: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        placeholder="50"
+                        className="min-h-[44px]"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Numero totale di posti disponibili per i tavoli privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_max_seats">Posti Massimi per Tavolo</Label>
+                      <Input
+                        id="prive_max_seats"
+                        type="number"
+                        step="1"
+                        value={event.prive_max_seats ?? ''}
+                        onChange={(e) => setEvent({ ...event, prive_max_seats: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        placeholder="10"
+                        className="min-h-[44px]"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Numero massimo di persone per tavolo privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_min_price">Prezzo Minimo Tavolo (€)</Label>
+                      <Input
+                        id="prive_min_price"
+                        type="number"
+                        step="0.01"
+                        value={event.prive_min_price ?? ''}
+                        onChange={(e) => setEvent({ ...event, prive_min_price: e.target.value ? parseFloat(e.target.value) : null })}
+                        placeholder="100.00"
+                        className="min-h-[44px]"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Prezzo minimo richiesto per prenotare un tavolo privé
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="prive_deposit_required">Deposito Richiesto (€)</Label>
+                      <Input
+                        id="prive_deposit_required"
+                        type="number"
+                        step="0.01"
+                        value={event.prive_deposit_required ?? ''}
+                        onChange={(e) => setEvent({ ...event, prive_deposit_required: e.target.value ? parseFloat(e.target.value) : null })}
+                        placeholder="50.00"
+                        className="min-h-[44px]"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Deposito richiesto al momento della prenotazione (opzionale)
+                      </p>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

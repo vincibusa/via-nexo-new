@@ -158,12 +158,39 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { guest_ids = [], notes, wants_group_chat = false } = body;
+    const { 
+      guest_ids = [], 
+      notes, 
+      wants_group_chat = false,
+      reservation_type = 'pista',
+      is_open_table = false,
+      open_table_description,
+      open_table_min_budget,
+      open_table_available_spots
+    } = body;
+
+    // Validate reservation_type
+    if (reservation_type !== 'pista' && reservation_type !== 'prive') {
+      return NextResponse.json(
+        { error: 'Invalid reservation_type. Must be "pista" or "prive"' },
+        { status: 400 }
+      );
+    }
+
+    // Validate open_table can only be true for prive
+    if (is_open_table && reservation_type !== 'prive') {
+      return NextResponse.json(
+        { error: 'Open table is only available for prive reservations' },
+        { status: 400 }
+      );
+    }
 
     // Log for debugging
     console.log('[Reservations] Creating reservation:', {
       event_id: id,
       owner_id: user.id,
+      reservation_type,
+      is_open_table,
       guest_ids,
       guest_count: guest_ids.length,
     });
@@ -171,7 +198,7 @@ export async function POST(
     // Get event settings
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, title, lista_nominativa_enabled, max_guests_per_reservation, start_datetime, end_datetime')
+      .select('id, title, lista_nominativa_enabled, max_guests_per_reservation, start_datetime, end_datetime, prive_enabled, prive_min_price, prive_max_seats, prive_deposit_required')
       .eq('id', id)
       .single();
 
@@ -179,19 +206,68 @@ export async function POST(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
-    if (!event.lista_nominativa_enabled) {
-      return NextResponse.json(
-        { error: 'Lista nominativa not enabled for this event' },
-        { status: 400 }
-      );
-    }
+    // Validate prive reservation
+    if (reservation_type === 'prive') {
+      if (!event.prive_enabled) {
+        return NextResponse.json(
+          { error: 'Prive reservations are not enabled for this event' },
+          { status: 400 }
+        );
+      }
 
-    const max_guests = event.max_guests_per_reservation || 5;
-    if (guest_ids.length > max_guests) {
-      return NextResponse.json(
-        { error: `Maximum ${max_guests} guests allowed` },
-        { status: 400 }
-      );
+      // Validate min price if set
+      if (event.prive_min_price && open_table_min_budget && open_table_min_budget < event.prive_min_price) {
+        return NextResponse.json(
+          { error: `Minimum budget must be at least €${event.prive_min_price}` },
+          { status: 400 }
+        );
+      }
+
+      // Use prive_max_seats if available, otherwise fallback to max_guests_per_reservation
+      const max_seats = event.prive_max_seats || event.max_guests_per_reservation || 10;
+      const total_people = 1 + guest_ids.length; // owner + guests
+      
+      if (total_people > max_seats) {
+        return NextResponse.json(
+          { error: `Maximum ${max_seats} people allowed for prive reservation` },
+          { status: 400 }
+        );
+      }
+
+      // Validate available spots for open table
+      if (is_open_table) {
+        if (!open_table_available_spots || open_table_available_spots <= 0) {
+          return NextResponse.json(
+            { error: 'Available spots must be greater than 0 for open table' },
+            { status: 400 }
+          );
+        }
+        
+        // Available spots cannot exceed remaining capacity
+        const remaining_capacity = max_seats - total_people;
+        if (open_table_available_spots > remaining_capacity) {
+          return NextResponse.json(
+            { error: `Available spots cannot exceed ${remaining_capacity} (remaining capacity)` },
+            { status: 400 }
+          );
+        }
+      }
+    } else {
+      // Pista reservation validation
+      if (!event.lista_nominativa_enabled) {
+        return NextResponse.json(
+          { error: 'Lista nominativa not enabled for this event' },
+          { status: 400 }
+        );
+      }
+
+      const max_guests = event.max_guests_per_reservation || 5;
+      if (guest_ids.length > max_guests) {
+        return NextResponse.json(
+          { error: `Maximum ${max_guests} guests allowed` },
+          { status: 400 }
+        );
+      }
     }
 
     // Check if owner already has a reservation for this event
@@ -280,16 +356,27 @@ export async function POST(
 
     // Create reservation for owner
     const qr_code_token = generateQRToken();
+    const reservationData: any = {
+      event_id: id,
+      owner_id: user.id,
+      qr_code_token,
+      total_guests: 1,
+      notes,
+      wants_group_chat,
+      reservation_type,
+    };
+
+    // Add open table fields if applicable
+    if (reservation_type === 'prive' && is_open_table) {
+      reservationData.is_open_table = true;
+      reservationData.open_table_description = open_table_description || null;
+      reservationData.open_table_min_budget = open_table_min_budget || null;
+      reservationData.open_table_available_spots = open_table_available_spots || 0;
+    }
+
     const { data: reservation, error: createError } = await supabase
       .from('event_reservations')
-      .insert({
-        event_id: id,
-        owner_id: user.id,
-        qr_code_token,
-        total_guests: 1,
-        notes,
-        wants_group_chat,
-      })
+      .insert(reservationData)
       .select('*')
       .single();
 

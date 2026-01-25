@@ -1,5 +1,4 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
@@ -8,17 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -81,17 +70,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -148,16 +127,26 @@ export async function DELETE(
     }
 
     // Delete reservation (cascade will handle guests)
-    const { error } = await supabase
+    const { data: deletedData, error } = await supabase
       .from('event_reservations')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (error) {
       console.error('Error deleting reservation:', error);
       return NextResponse.json(
         { error: 'Failed to delete reservation' },
         { status: 500 }
+      );
+    }
+
+    // Check if any rows were actually deleted
+    if (!deletedData || deletedData.length === 0) {
+      console.error('No reservation deleted - RLS policy may have blocked the operation');
+      return NextResponse.json(
+        { error: 'Reservation not found or unauthorized' },
+        { status: 404 }
       );
     }
 

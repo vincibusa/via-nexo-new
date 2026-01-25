@@ -134,6 +134,12 @@ export async function PATCH(
       'capacity',
       'lista_nominativa_enabled',
       'max_guests_per_reservation',
+      'prive_enabled',
+      'prive_min_price',
+      'prive_max_seats',
+      'prive_deposit_required',
+      'prive_total_capacity',
+      'capacity',
       'metadata'
     ]
 
