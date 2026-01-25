@@ -152,9 +152,9 @@ export function createCSRFErrorResponse(
   // Se serve un token, generalo e impostalo come cookie
   if (needsToken) {
     const token = generateCSRFToken()
-    
+
     response.cookies.set(CSRF_COOKIE_NAME, token, {
-      httpOnly: false, // Deve essere accessibile da JavaScript
+      httpOnly: true, // SECURITY FIX: Prevent JavaScript access to block XSS attacks
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       path: '/',
@@ -175,9 +175,9 @@ export function createCSRFErrorResponse(
 export function setCSRFTokenForSafeRequest(response: NextResponse): NextResponse {
   // Genera sempre un nuovo token per le richieste safe
   const token = generateCSRFToken()
-  
+
   response.cookies.set(CSRF_COOKIE_NAME, token, {
-    httpOnly: false, // Accessibile da JavaScript
+    httpOnly: true, // SECURITY FIX: Prevent JavaScript access to block XSS attacks
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',

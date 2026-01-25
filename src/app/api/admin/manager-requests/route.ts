@@ -1,92 +1,71 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { withRoleProtection, AuthContext } from '@/lib/middleware/auth'
 
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = await createClient()
+async function handleGetManagerRequests(request: NextRequest, user: AuthContext): Promise<NextResponse> {
+  const supabase = await createClient()
 
-    // Check if user is admin
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+  // Get query params
+  const searchParams = request.nextUrl.searchParams
+  const pageParam = searchParams.get('page') || '1'
+  const limitParam = searchParams.get('limit') || '20'
+  const search = searchParams.get('search') || ''
+  const status = searchParams.get('status') || 'all'
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  // VALIDATION: Parse with fallback
+  const page = Math.max(1, parseInt(pageParam) || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(limitParam) || 20))
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+  const from = (page - 1) * limit
+  const to = from + limit - 1
 
-    if (profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+  // Build query
+  let query = supabase
+    .from('manager_requests')
+    .select(
+      `
+      *,
+      user:profiles!manager_requests_user_id_fkey(email, display_name)
+    `,
+      { count: 'exact' }
+    )
+    .order('created_at', { ascending: false })
 
-    // Get query params
-    const searchParams = request.nextUrl.searchParams
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const search = searchParams.get('search') || ''
-    const status = searchParams.get('status') || 'all'
+  // Apply filters
+  if (status !== 'all') {
+    query = query.eq('status', status)
+  }
 
-    const from = (page - 1) * limit
-    const to = from + limit - 1
+  if (search) {
+    query = query.or(
+      `business_name.ilike.%${search}%,user.email.ilike.%${search}%,user.display_name.ilike.%${search}%`
+    )
+  }
 
-    // Build query
-    let query = supabase
-      .from('manager_requests')
-      .select(
-        `
-        *,
-        user:profiles!manager_requests_user_id_fkey(email, display_name)
-      `,
-        { count: 'exact' }
-      )
-      .order('created_at', { ascending: false })
+  // Apply pagination
+  query = query.range(from, to)
 
-    // Apply filters
-    if (status !== 'all') {
-      query = query.eq('status', status)
-    }
+  const { data: requests, error, count } = await query
 
-    if (search) {
-      query = query.or(
-        `business_name.ilike.%${search}%,user.email.ilike.%${search}%,user.display_name.ilike.%${search}%`
-      )
-    }
-
-    // Apply pagination
-    query = query.range(from, to)
-
-    const { data: requests, error, count } = await query
-
-    if (error) {
-      console.error('Error fetching manager requests:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch manager requests' },
-        { status: 500 }
-      )
-    }
-
-    const totalPages = Math.ceil((count || 0) / limit)
-
-    return NextResponse.json({
-      requests: requests || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages,
-      },
-    })
-  } catch (error) {
-    console.error('Error in manager requests API:', error)
+  if (error) {
+    console.error('Error fetching manager requests:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch manager requests' },
       { status: 500 }
     )
   }
+
+  const totalPages = Math.ceil((count || 0) / limit)
+
+  return NextResponse.json({
+    requests: requests || [],
+    pagination: {
+      page,
+      limit,
+      total: count || 0,
+      totalPages,
+    },
+  })
 }
+
+export const GET = withRoleProtection(handleGetManagerRequests, ['admin'])

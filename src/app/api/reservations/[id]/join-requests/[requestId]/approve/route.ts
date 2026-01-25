@@ -116,31 +116,26 @@ export async function POST(
       );
     }
 
-    // Create a new reservation for the approved user
-    // This allows them to see the event in their reservations list
+    // Create a new reservation for the approved user using RPC function
+    // This bypasses RLS policies since it's a server-side operation
     const newReservationQRToken = generateQRToken();
-    
+
     console.log('[Approve Request] Creating reservation for user:', {
       requester_id: joinRequest.requester_id,
       event_id: reservation.event_id,
       reservation_type: reservation.reservation_type || 'prive',
     });
-    
-    const { data: newReservation, error: createReservationError } = await supabase
-      .from('event_reservations')
-      .insert({
-        event_id: reservation.event_id,
-        owner_id: joinRequest.requester_id,
-        reservation_type: reservation.reservation_type || 'prive',
-        status: 'confirmed',
-        total_guests: 1,
-        qr_code_token: newReservationQRToken,
-        notes: `Parte del tavolo aperto - Richiesta approvata`,
-      })
-      .select('id, owner_id, event_id, status')
-      .single();
 
-    if (createReservationError || !newReservation) {
+    const { data: newReservation, error: createReservationError } = await supabase
+      .rpc('approve_open_table_request', {
+        p_request_id: requestId,
+        p_reservation_id: id,
+        p_requester_id: joinRequest.requester_id,
+        p_event_id: reservation.event_id,
+        p_qr_token: newReservationQRToken,
+      });
+
+    if (createReservationError || !newReservation || newReservation.length === 0) {
       console.error('[Approve Request] Error creating reservation for approved user:', {
         error: createReservationError,
         requester_id: joinRequest.requester_id,
@@ -151,18 +146,21 @@ export async function POST(
         .from('open_table_requests')
         .update({ status: 'pending', responded_at: null })
         .eq('id', requestId);
-      
+
       return NextResponse.json(
         { error: 'Failed to create reservation for approved user' },
         { status: 500 }
       );
     }
 
+    // RPC returns array, get first element
+    const newReservationData = Array.isArray(newReservation) ? newReservation[0] : newReservation;
+
     console.log('[Approve Request] Reservation created successfully:', {
-      reservation_id: newReservation.id,
-      owner_id: newReservation.owner_id,
-      event_id: newReservation.event_id,
-      status: newReservation.status,
+      reservation_id: newReservationData.id,
+      owner_id: newReservationData.owner_id,
+      event_id: newReservationData.event_id,
+      status: newReservationData.status,
     });
 
     // Add approved user to event group chat automatically
@@ -194,7 +192,7 @@ export async function POST(
           await supabase
             .from('event_reservations')
             .update({ wants_group_chat: true })
-            .eq('id', newReservation.id);
+            .eq('id', newReservationData.id);
         } else {
           console.error('[Approve Request] Error adding user to group chat:', addChatError);
           // Don't fail the approval if chat join fails
@@ -247,9 +245,9 @@ export async function POST(
         type: 'reservation_invitation',
         content: `La tua richiesta per il tavolo "${event.title || 'evento'}" è stata approvata!`,
         entity_type: 'reservation',
-        entity_id: newReservation.id,
+        entity_id: newReservationData.id,
         metadata: {
-          reservation_id: newReservation.id,
+          reservation_id: newReservationData.id,
           original_reservation_id: id,
           request_id: requestId,
           event_id: reservation.event_id,
@@ -260,12 +258,12 @@ export async function POST(
       console.error('Error sending notification:', notificationError);
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       join_request: updatedRequest,
       new_reservation: {
-        id: newReservation.id,
-        owner_id: newReservation.owner_id,
-        event_id: newReservation.event_id,
+        id: newReservationData.id,
+        owner_id: newReservationData.owner_id,
+        event_id: newReservationData.event_id,
       }
     });
   } catch (error) {

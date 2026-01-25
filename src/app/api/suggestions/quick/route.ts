@@ -8,7 +8,7 @@ const quickSuggestionsRequestSchema = z.object({
     lat: z.number().min(-90).max(90),
     lon: z.number().min(-180).max(180),
   }),
-  radius_km: z.number().min(0.5).max(50).optional().default(10),
+  radius_km: z.number().min(0.5).max(50).optional().default(50),
   limit: z.number().min(1).max(20).optional().default(6),
 })
 

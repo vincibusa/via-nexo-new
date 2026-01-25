@@ -40,6 +40,9 @@ export async function POST(request: NextRequest) {
         total_guests,
         checked_in_at,
         created_at,
+        reservation_type,
+        is_open_table,
+        open_table_available_spots,
         event:events(
           id,
           title,

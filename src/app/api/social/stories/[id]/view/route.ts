@@ -1,6 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { createNotification } from '@/lib/services/notifications';
 
 export async function POST(
@@ -9,17 +8,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -41,11 +30,20 @@ export async function POST(
     }
 
     // Insert view record (upsert to avoid duplicates)
+    // First check if view already exists
+    const { data: existingView } = await supabase
+      .from('story_views')
+      .select('id')
+      .eq('story_id', id)
+      .eq('viewer_id', user.id)
+      .single();
+
     const { error } = await supabase
       .from('story_views')
       .upsert({
+        id: existingView?.id, // Include primary key for proper upsert
         story_id: id,
-        user_id: user.id,
+        viewer_id: user.id, // Fixed: was 'user_id', should be 'viewer_id'
         viewed_at: new Date().toISOString(),
       });
 

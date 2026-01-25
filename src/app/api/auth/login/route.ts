@@ -94,8 +94,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user has admin or manager role
-    if (profile.role !== 'admin' && profile.role !== 'manager') {
+    // Detect platform from query parameter
+    // Mobile app (?platform=mobile) allows all user types
+    // Web dashboard (no platform param) restricts to admin/manager only
+    const url = new URL(request.url)
+    const platform = url.searchParams.get('platform')
+    const isMobileLogin = platform === 'mobile'
+
+    // Check if user has admin or manager role (only for web dashboard)
+    if (!isMobileLogin && profile.role !== 'admin' && profile.role !== 'manager') {
       recordErrorStat('AUTH_ACCESS_DENIED')
       // Logout the user
       await supabase.auth.signOut()

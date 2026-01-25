@@ -1,20 +1,9 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },
@@ -91,7 +80,7 @@ export async function GET(request: NextRequest) {
         const { data: viewedStories } = await supabase
           .from('story_views')
           .select('story_id')
-          .eq('user_id', user.id)
+          .eq('viewer_id', user.id) // Fixed: was 'user_id', should be 'viewer_id'
           .in('story_id', group.stories.map((s: any) => s.id));
 
         const viewedStoryIds = new Set(

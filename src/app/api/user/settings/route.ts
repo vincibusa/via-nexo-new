@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       push_token: metadata.push_token || null,
       push_enabled: metadata.push_enabled ?? true,
       language: metadata.language || 'it',
-      default_radius_km: metadata.default_radius_km || 5,
+      default_radius_km: metadata.default_radius_km || 50,
       theme: metadata.theme || 'system',
     }
 
@@ -128,7 +128,7 @@ export async function PATCH(request: NextRequest) {
       push_token: updatedMetadata.push_token || null,
       push_enabled: updatedMetadata.push_enabled ?? true,
       language: updatedMetadata.language || 'it',
-      default_radius_km: updatedMetadata.default_radius_km || 5,
+      default_radius_km: updatedMetadata.default_radius_km || 50,
       theme: updatedMetadata.theme || 'system',
     }
 

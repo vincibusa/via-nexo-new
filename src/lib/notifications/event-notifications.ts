@@ -17,7 +17,7 @@ interface EventNotificationPayload {
 export async function notifyUsersAboutNewEvent(
   supabase: SupabaseClient,
   eventPayload: EventNotificationPayload,
-  radiusKm: number = 20 // Default 20km radius
+  radiusKm: number = 50 // Default 50km radius
 ): Promise<{ sent: number; failed: number; error?: string }> {
   try {
     const { eventId, eventTitle, placeId, placeName, startDatetime, latitude, longitude } = eventPayload

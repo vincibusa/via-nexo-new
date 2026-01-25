@@ -175,7 +175,7 @@ export interface RAGResult {
 export async function geoFilterPlaces(
   lat: number,
   lon: number,
-  radiusKm: number = 5,
+  radiusKm: number = 50,
   category?: string
 ): Promise<string[]> {
   // ENHANCED: Smart caching even with category filter
@@ -428,14 +428,12 @@ export async function reRank(
     // FAST: Boost verified places
     if (place.verification_status === 'approved') score += 0.1
 
-    // FAST: Distance calculation semplificato (no Haversine per performance)
-    const latDiff = Math.abs(place.lat - targetLat)
-    const lonDiff = Math.abs(place.lon - targetLon)
-    const approximateDistance = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff) * 111 // Km approssimati
+    // ACCURACY: Use precise Haversine formula for distance calculation
+    const distanceKm = calculateDistance(targetLat, targetLon, place.lat, place.lon)
 
-    // FAST: Distance penalty semplificato
-    if (approximateDistance > 3) {
-      score -= Math.min(0.3, (approximateDistance - 3) * 0.05)
+    // Distance penalty: closer places get better scores
+    if (distanceKm > 3) {
+      score -= Math.min(0.3, (distanceKm - 3) * 0.05)
     }
 
     // FAST: Popularity boost semplificato
@@ -483,7 +481,7 @@ export async function reRank(
         music_genre: place.music_genre,
         verification_status: place.verification_status,
         opening_hours: place.opening_hours,
-        distance_km: approximateDistance,
+        distance_km: distanceKm,
         suggestions_count: place.suggestions_count,
       },
     }
@@ -688,7 +686,7 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
 export async function geoFilterEvents(
   lat: number,
   lon: number,
-  radiusKm: number = 5
+  radiusKm: number = 50
 ): Promise<string[]> {
   const cacheKey = createGeoFilterCacheKey(lat, lon, radiusKm, 'events')
   
@@ -943,7 +941,7 @@ export async function reRankEvents(
         ticket_price_min: event.ticket_price_min,
         ticket_price_max: event.ticket_price_max,
         place: event.place,
-        distance_km: approximateDistance,
+        distance_km: distanceKm,
       },
     }
   })

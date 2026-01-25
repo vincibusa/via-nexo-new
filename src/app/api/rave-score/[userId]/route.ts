@@ -127,10 +127,17 @@ export async function GET(
 
     const scoreData = (calculatedScore as RaveScoreRow[])[0]
 
-    // Upsert cache
+    // Upsert cache - Get existing ID first
+    const { data: existingScore } = await supabase
+      .from('rave_scores')
+      .select('id')
+      .eq('user_id', userId)
+      .single()
+
     const { error: upsertError } = await supabase
       .from('rave_scores')
       .upsert({
+        id: existingScore?.id, // Include primary key for proper upsert
         user_id: userId,
         presence_score: scoreData.presence_score,
         trust_score: scoreData.trust_score,

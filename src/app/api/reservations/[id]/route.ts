@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { createNotification } from '@/lib/services/notifications';
 
 export async function GET(
   request: NextRequest,
@@ -80,10 +81,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get reservation to check ownership and event_id
+    // Get reservation to check ownership, event_id, and if it's an open table
     const { data: reservation } = await supabase
       .from('event_reservations')
-      .select('owner_id, event_id')
+      .select(`
+        owner_id,
+        event_id,
+        is_open_table,
+        event:events(
+          id,
+          title
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -99,6 +108,70 @@ export async function DELETE(
       .from('reservation_guests')
       .select('guest_id')
       .eq('reservation_id', id);
+
+    // If this is an open table, find and delete guest reservations
+    if (reservation.is_open_table && guests && guests.length > 0) {
+      const eventTitle = reservation.event?.title || 'evento';
+      
+      for (const guest of guests) {
+        try {
+          // Find the guest's separate reservation for this event
+          const { data: guestReservation } = await supabase
+            .from('event_reservations')
+            .select('id, owner_id')
+            .eq('owner_id', guest.guest_id)
+            .eq('event_id', reservation.event_id)
+            .single();
+
+          if (guestReservation) {
+            // Remove guest from event group chat
+            try {
+              await supabase.rpc('remove_user_from_event_group_chat', {
+                p_event_id: reservation.event_id,
+                p_user_id: guest.guest_id,
+              });
+            } catch (chatError) {
+              console.error('Error removing guest from chat:', chatError);
+              // Don't fail deletion if chat removal fails
+            }
+
+            // Delete the guest's reservation
+            const { error: deleteGuestError } = await supabase
+              .from('event_reservations')
+              .delete()
+              .eq('id', guestReservation.id);
+
+            if (deleteGuestError) {
+              console.error('Error deleting guest reservation:', deleteGuestError);
+              // Continue with other guests even if one fails
+            } else {
+              // Send cancellation notification to guest
+              try {
+                await createNotification({
+                  user_id: guest.guest_id,
+                  type: 'reservation_cancelled',
+                  content: `Il proprietario del tavolo ha cancellato la prenotazione per "${eventTitle}". La tua prenotazione è stata annullata.`,
+                  entity_type: 'reservation',
+                  entity_id: guestReservation.id,
+                  metadata: {
+                    reservation_id: guestReservation.id,
+                    event_id: reservation.event_id,
+                    event_title: eventTitle,
+                    cancelled_by_owner: true,
+                  },
+                });
+              } catch (notificationError) {
+                console.error('Error sending cancellation notification:', notificationError);
+                // Don't fail deletion if notification fails
+              }
+            }
+          }
+        } catch (guestError) {
+          console.error('Error processing guest cancellation:', guestError);
+          // Continue with other guests even if one fails
+        }
+      }
+    }
 
     // Remove owner from event group chat (if exists)
     try {

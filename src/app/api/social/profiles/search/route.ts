@@ -24,13 +24,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get search query and limit from URL params
+    // Get search query and limit from URL params with validation
     const searchParams = request.nextUrl.searchParams;
     const q = searchParams.get('q');
-    const limit = parseInt(searchParams.get('limit') || '20');
 
+    // VALIDATION: Require search query and limit max length
     if (!q || q.trim().length === 0) {
-      return NextResponse.json({ error: 'Search query required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Search query required' },
+        { status: 400 }
+      );
+    }
+
+    if (q.length > 100) {
+      return NextResponse.json(
+        { error: 'Search query too long (max 100 characters)' },
+        { status: 400 }
+      );
+    }
+
+    // VALIDATION: Parse limit with fallback and max cap
+    const limitParam = searchParams.get('limit') || '20';
+    let limit = parseInt(limitParam);
+
+    // Fallback to default if parseInt fails
+    if (isNaN(limit)) {
+      limit = 20;
+    }
+
+    // Cap maximum limit to prevent excessive results
+    const MAX_LIMIT = 100;
+    if (limit > MAX_LIMIT) {
+      limit = MAX_LIMIT;
+    }
+    if (limit < 1) {
+      limit = 1;
     }
 
     // Search profiles by display_name or email (case-insensitive)
@@ -50,22 +78,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Enrich results with follow status for current user
-    const enrichedProfiles = await Promise.all(
-      profiles.map(async (profile) => {
-        const { data: followData } = await supabase
-          .from('follows')
-          .select('id')
-          .eq('follower_id', user.id)
-          .eq('following_id', profile.id)
-          .single();
+    // PERFORMANCE: Batch query for follow status instead of N+1 queries
+    const profileIds = profiles.map(p => p.id);
 
-        return {
-          ...profile,
-          isFollowing: !!followData,
-        };
-      })
-    );
+    let followingSet = new Set<string>();
+    if (profileIds.length > 0) {
+      const { data: followData, error: followError } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+        .in('following_id', profileIds);
+
+      if (!followError && followData) {
+        followingSet = new Set(followData.map(f => f.following_id));
+      }
+    }
+
+    // Enrich results with follow status from cached data
+    const enrichedProfiles = profiles.map(profile => ({
+      ...profile,
+      isFollowing: followingSet.has(profile.id),
+    }));
 
     return NextResponse.json(enrichedProfiles);
   } catch (error) {

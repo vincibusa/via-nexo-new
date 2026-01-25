@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 
 /**
  * CORS configuration
- * Permette tutte le origini per default
+ * SECURITY FIX: Default to empty array (no CORS) unless explicitly configured
+ * Set ALLOWED_ORIGINS environment variable to enable specific origins
  */
 export const corsConfig = {
-  // Permette tutte le origini (puoi restringere con ALLOWED_ORIGINS se necessario)
-  allowedOrigins: process.env.ALLOWED_ORIGINS 
+  // SECURITY: Only allow explicitly configured origins
+  // Set ALLOWED_ORIGINS=https://example.com,https://app.example.com in .env
+  allowedOrigins: process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-    : ['*'], // Default: tutte le origini
+    : [], // Default: NO origins allowed (must be explicitly configured)
   
   allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
