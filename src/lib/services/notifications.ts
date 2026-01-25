@@ -34,6 +34,8 @@ export type NotificationType =
   | 'reservation_invitation'
   | 'reservation_cancelled'
   | 'reservation_checked_in'
+  | 'open_table_join_request'
+  | 'open_table_request_rejected'
 
 /**
  * Crea una notifica nel database
@@ -193,6 +195,18 @@ function getNotificationContent(
       return {
         title: 'Nuova visualizzazione',
         body: `${actorName} ha visto la tua story`
+      }
+    
+    case 'open_table_join_request':
+      return {
+        title: 'Richiesta di unirsi al tavolo',
+        body: `${actorName} vuole unirsi al tuo tavolo per "${metadata?.event_title || 'evento'}"`
+      }
+    
+    case 'open_table_request_rejected':
+      return {
+        title: 'Richiesta rifiutata',
+        body: `La tua richiesta per il tavolo "${metadata?.event_title || 'evento'}" è stata rifiutata`
       }
     
     default:

@@ -186,10 +186,11 @@ export async function POST(
 
     // Send notification to table owner
     try {
+      const event = Array.isArray(reservation.event) ? reservation.event[0] : reservation.event;
       await createNotification({
         user_id: reservation.owner_id,
         type: 'open_table_join_request',
-        content: `Nuova richiesta per unirsi al tuo tavolo per "${reservation.event?.title || 'evento'}"`,
+        content: `Nuova richiesta per unirsi al tuo tavolo per "${event?.title || 'evento'}"`,
         entity_type: 'reservation',
         entity_id: id,
         metadata: {
@@ -197,7 +198,7 @@ export async function POST(
           request_id: joinRequest.id,
           requester_id: user.id,
           event_id: reservation.event_id,
-          event_title: reservation.event?.title,
+          event_title: event?.title,
         },
       });
     } catch (notificationError) {

@@ -941,7 +941,7 @@ export async function reRankEvents(
         ticket_price_min: event.ticket_price_min,
         ticket_price_max: event.ticket_price_max,
         place: event.place,
-        distance_km: distanceKm,
+        distance_km: approximateDistance,
       },
     }
   })

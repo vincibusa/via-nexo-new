@@ -90,17 +90,18 @@ export async function POST(
 
     // Send notification to requester
     try {
+      const event = Array.isArray(reservation.event) ? reservation.event[0] : reservation.event;
       await createNotification({
         user_id: joinRequest.requester_id,
         type: 'open_table_request_rejected',
-        content: `La tua richiesta per il tavolo "${reservation.event?.title || 'evento'}" è stata rifiutata`,
+        content: `La tua richiesta per il tavolo "${event?.title || 'evento'}" è stata rifiutata`,
         entity_type: 'reservation',
         entity_id: id,
         metadata: {
           reservation_id: id,
           request_id: requestId,
           event_id: reservation.event_id,
-          event_title: reservation.event?.title,
+          event_title: event?.title,
         },
       });
     } catch (notificationError) {

@@ -111,7 +111,8 @@ export async function DELETE(
 
     // If this is an open table, find and delete guest reservations
     if (reservation.is_open_table && guests && guests.length > 0) {
-      const eventTitle = reservation.event?.title || 'evento';
+      const event = Array.isArray(reservation.event) ? reservation.event[0] : reservation.event;
+      const eventTitle = event?.title || 'evento';
       
       for (const guest of guests) {
         try {
