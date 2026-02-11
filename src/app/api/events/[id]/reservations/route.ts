@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { createNotification } from '@/lib/services/notifications';
+import { calculateDistance } from '@/lib/utils/distance';
 
 function generateQRToken(): string {
   const timestamp = Date.now().toString(36);
@@ -158,16 +159,25 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { 
-      guest_ids = [], 
-      notes, 
+    const {
+      guest_ids = [],
+      notes,
       wants_group_chat = false,
       reservation_type = 'pista',
       is_open_table = false,
       open_table_description,
       open_table_min_budget,
-      open_table_available_spots
+      open_table_available_spots,
+      user_location
     } = body;
+
+    // Validate user_location (FASE 2)
+    if (!user_location || typeof user_location.lat !== 'number' || typeof user_location.lon !== 'number') {
+      return NextResponse.json(
+        { error: 'User location is required for booking' },
+        { status: 400 }
+      );
+    }
 
     // Validate reservation_type
     if (reservation_type !== 'pista' && reservation_type !== 'prive') {
@@ -195,15 +205,76 @@ export async function POST(
       guest_count: guest_ids.length,
     });
 
-    // Get event settings
+    // Get event settings with place location for distance validation
     const { data: event, error: eventError } = await supabase
       .from('events')
-      .select('id, title, lista_nominativa_enabled, max_guests_per_reservation, start_datetime, end_datetime, prive_enabled, prive_min_price, prive_max_seats, prive_deposit_required')
+      .select(`
+        id,
+        title,
+        lista_nominativa_enabled,
+        max_guests_per_reservation,
+        start_datetime,
+        end_datetime,
+        prive_enabled,
+        prive_min_price,
+        prive_max_seats,
+        prive_deposit_required,
+        booking_radius_km,
+        place:places!events_place_id_fkey(
+          id,
+          name,
+          address,
+          city,
+          lat,
+          lon,
+          booking_radius_km
+        )
+      `)
       .eq('id', id)
       .single();
 
     if (eventError || !event) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    const venue = Array.isArray(event.place) ? event.place[0] : event.place;
+
+    // Validate distance for booking (FASE 2)
+    if (venue?.lat == null || venue?.lon == null) {
+      return NextResponse.json(
+        { error: 'Venue location not available for booking validation' },
+        { status: 400 }
+      );
+    }
+
+    // Calculate distance from user to venue
+    const distanceKm = calculateDistance(
+      user_location.lat,
+      user_location.lon,
+      venue.lat,
+      venue.lon
+    );
+
+    // Determine booking radius (priority: event > place > default 10km)
+    const DEFAULT_BOOKING_RADIUS = 10;
+    const maxBookingRadius = event.booking_radius_km ??
+      venue.booking_radius_km ??
+      DEFAULT_BOOKING_RADIUS;
+
+    // Check if user is within booking radius
+    if (distanceKm > maxBookingRadius) {
+      return NextResponse.json(
+        {
+          error: `You must be within ${maxBookingRadius}km of the venue to book this event`,
+          details: {
+            current_distance_km: parseFloat(distanceKm.toFixed(2)),
+            max_booking_radius_km: maxBookingRadius,
+            venue_name: venue.name,
+            venue_address: `${venue.address}, ${venue.city}`,
+          },
+        },
+        { status: 403 }
+      );
     }
 
     // Validate prive reservation

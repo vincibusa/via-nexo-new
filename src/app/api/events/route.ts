@@ -195,13 +195,9 @@ export async function GET(request: NextRequest) {
       return result;
     });
 
-    // Filter by max distance if specified
-    if (maxDistance && lat && lon) {
-      const maxDist = parseFloat(maxDistance);
-      processedResults = processedResults.filter(
-        (event: any) => event.distance_km !== undefined && event.distance_km <= maxDist
-      );
-    }
+    // NOTE: Distance filtering removed (FASE 1)
+    // Users can now see all events regardless of distance
+    // Booking distance validation happens at reservation time (FASE 2)
 
     // Sort results
     if (sortBy === 'date') {

@@ -169,8 +169,9 @@ export interface RAGResult {
 }
 
 /**
- * Step A: Geo Filter - Find places within radius using PostGIS
- * OPTIMIZED: Uses cache for frequently requested areas
+ * Step A: Geo Filter - Fetch ALL places (no distance filtering)
+ * CHANGED: Removed PostGIS radius filtering to allow unlimited browsing
+ * Distance is still calculated later for ordering and display
  */
 export async function geoFilterPlaces(
   lat: number,
@@ -178,9 +179,9 @@ export async function geoFilterPlaces(
   radiusKm: number = 50,
   category?: string
 ): Promise<string[]> {
-  // ENHANCED: Smart caching even with category filter
-  const cacheKey = createGeoFilterCacheKey(lat, lon, radiusKm, 'places') + (category ? `:${category}` : '')
-  
+  // Cache key for browsing all places (ignoring radius now)
+  const cacheKey = `all_places:${category || 'all'}`
+
   // Try enhanced cache first
   const cached = await getCachedGeoResults(cacheKey)
   if (cached) {
@@ -188,9 +189,6 @@ export async function geoFilterPlaces(
   }
 
   const supabase = await getReadOnlyClient()
-
-  // Convert radius to meters for PostGIS
-  const radiusMeters = radiusKm * 1000
 
   let query = supabase
     .from('places')
@@ -204,21 +202,17 @@ export async function geoFilterPlaces(
     query = query.eq('place_type', category)
   }
 
-  // PostGIS distance filter using RPC function
-  const { data, error } = await supabase.rpc('places_within_radius', {
-    center_lat: lat,
-    center_lon: lon,
-    radius_meters: radiusMeters,
-  })
+  // Fetch ALL published places (no distance filtering)
+  const { data, error } = await query.limit(200)
 
   if (error) {
-    console.error('Error in geo filter:', error)
+    console.error('Error fetching places:', error)
     return []
   }
 
-  // Return max 100 candidates
-  const results = (data || []).slice(0, 100).map((p: any) => p.id)
-  
+  // Return max 200 candidates
+  const results = (data || []).map((p: any) => p.id)
+
   // ENHANCED: Always cache results for performance
   await setCachedGeoResults(cacheKey, results, 'places', lat, lon, radiusKm)
 
@@ -680,16 +674,17 @@ Seleziona ESATTAMENTE 3 locali dalla lista sopra che meglio corrispondono al con
  */
 
 /**
- * Step A (Events): Geo Filter - Find events within radius using PostGIS
- * OPTIMIZED: Uses cache for frequently requested areas
+ * Step A (Events): Geo Filter - Fetch ALL events (no distance filtering)
+ * CHANGED: Removed PostGIS radius filtering to allow unlimited browsing
+ * Distance is still calculated later for ordering and display
  */
 export async function geoFilterEvents(
   lat: number,
   lon: number,
   radiusKm: number = 50
 ): Promise<string[]> {
-  const cacheKey = createGeoFilterCacheKey(lat, lon, radiusKm, 'events')
-  
+  const cacheKey = 'all_events:upcoming'
+
   // ENHANCED: Use async cache system
   const cached = await getCachedGeoResults(cacheKey)
   if (cached) {
@@ -698,21 +693,22 @@ export async function geoFilterEvents(
 
   const supabase = await getReadOnlyClient()
 
-  const radiusMeters = radiusKm * 1000
-
-  const { data, error } = await supabase.rpc('events_within_radius', {
-    center_lat: lat,
-    center_lon: lon,
-    radius_meters: radiusMeters,
-  })
+  // Fetch ALL published events in the future (no distance filtering)
+  const now = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('events')
+    .select('id')
+    .eq('is_published', true)
+    .gte('start_datetime', now)
+    .limit(200)
 
   if (error) {
-    console.error('Error in geo filter (events):', error)
+    console.error('Error fetching events:', error)
     return []
   }
 
-  const results = (data || []).slice(0, 100).map((e: any) => e.id)
-  
+  const results = (data || []).map((e: any) => e.id)
+
   // ENHANCED: Async cache storage
   await setCachedGeoResults(cacheKey, results, 'events', lat, lon, radiusKm)
 

@@ -106,7 +106,7 @@ export async function PATCH(
 
     const body = await request.json()
 
-    // Managers cannot change verification_status
+    // Managers cannot change verification_status (we'll set it automatically to approved)
     delete body.verification_status
 
     // Whitelist of fields that can be updated
@@ -150,6 +150,10 @@ export async function PATCH(
         updates[field] = body[field]
       }
     }
+
+    // Auto-approve and auto-publish when manager updates an event
+    updates.verification_status = 'approved'
+    updates.is_published = true
 
     // Update event
     const { data: event, error } = await supabase

@@ -119,10 +119,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Auto-set owner_id and default values
+    // Managers' events are automatically approved (verified) and published
     const eventData = {
       ...body,
       owner_id: user.id,
-      verification_status: 'pending',
+      verification_status: 'approved',
+      is_published: true,
       embeddings_status: 'pending',
     }
 
