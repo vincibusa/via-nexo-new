@@ -19,13 +19,8 @@ export async function GET(request: NextRequest) {
       .select('following_id')
       .eq('follower_id', user.id);
 
-    if (!followingData || followingData.length === 0) {
-      return NextResponse.json([]);
-    }
-
-    const followingIds = followingData.map((f) => f.following_id);
-
-    // Also include current user's stories
+    const followingIds = followingData?.map((f) => f.following_id) ?? [];
+    // Sempre includere le storie dell'utente corrente (anche se non segue nessuno)
     const userIds = [user.id, ...followingIds];
 
     // Get stories from followed users (grouped by user)

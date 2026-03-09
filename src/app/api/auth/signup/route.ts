@@ -11,7 +11,7 @@ async function handleSignup(request: NextRequest, context: ErrorContext): Promis
     return createRateLimitResponse('/api/auth/signup', rateLimitResult.error!, rateLimitResult.resetTime)
   }
 
-  const { email, password, displayName } = await request.json()
+  const { email, password, displayName, gender, date_of_birth } = await request.json()
 
   // Validation
   if (!email || !password) {
@@ -36,6 +36,57 @@ async function handleSignup(request: NextRequest, context: ErrorContext): Promis
     )
   }
 
+  // Validate gender if provided
+  if (gender !== undefined && gender !== null && gender !== '') {
+    if (gender !== 'Maschio' && gender !== 'Femmina') {
+      const secureError = createSecureError('VALIDATION_ERROR', 'Gender must be Maschio or Femmina')
+      return withCors(
+        request,
+        NextResponse.json(
+          { error: { code: secureError.code, message: secureError.message } },
+          { status: secureError.statusCode }
+        )
+      )
+    }
+  }
+
+  // Validate and calculate age from date_of_birth
+  let age: number | undefined;
+  if (date_of_birth) {
+    const birthDate = new Date(date_of_birth);
+    const today = new Date();
+
+    if (isNaN(birthDate.getTime())) {
+      const secureError = createSecureError('VALIDATION_ERROR', 'Invalid date of birth')
+      return withCors(
+        request,
+        NextResponse.json(
+          { error: { code: secureError.code, message: secureError.message } },
+          { status: secureError.statusCode }
+        )
+      )
+    }
+
+    // Calculate age
+    age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    // Validate minimum age (18 years)
+    if (age < 18) {
+      const secureError = createSecureError('VALIDATION_ERROR', 'You must be at least 18 years old')
+      return withCors(
+        request,
+        NextResponse.json(
+          { error: { code: secureError.code, message: secureError.message } },
+          { status: secureError.statusCode }
+        )
+      )
+    }
+  }
+
   const supabase = await createClient()
 
   // Sign up user with metadata (trigger will create profile automatically)
@@ -45,6 +96,8 @@ async function handleSignup(request: NextRequest, context: ErrorContext): Promis
     options: {
       data: {
         display_name: displayName || email.split('@')[0],
+        gender: gender || null,
+        age: age || null,
       },
     },
   })

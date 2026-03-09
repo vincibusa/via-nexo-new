@@ -41,6 +41,8 @@ export async function GET() {
         avatarUrl: profile.avatar_url,
         locale: profile.locale,
         createdAt: profile.created_at,
+        gender: profile.metadata?.gender || null,
+        age: profile.metadata?.age || null,
         metadata: profile.metadata,
       },
     })

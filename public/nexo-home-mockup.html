@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexo — Home Screen Flow</title>
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+
+    /* ── Liquid Glass ─────────────────────────── */
+    .glass-btn-dark {
+      background: rgba(24, 26, 32, 0.72);
+      backdrop-filter: blur(24px) saturate(200%);
+      -webkit-backdrop-filter: blur(24px) saturate(200%);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    }
+    .glass-btn-light {
+      background: rgba(255, 255, 255, 0.55);
+      backdrop-filter: blur(24px) saturate(200%);
+      -webkit-backdrop-filter: blur(24px) saturate(200%);
+      border: 1px solid rgba(255, 255, 255, 0.70);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .glass-modal {
+      background: rgba(14, 16, 22, 0.82);
+      backdrop-filter: blur(44px) saturate(220%);
+      -webkit-backdrop-filter: blur(44px) saturate(220%);
+      border: 1.5px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.55);
+    }
+    .glass-sheet {
+      background: rgba(12, 13, 18, 0.88);
+      backdrop-filter: blur(40px) saturate(200%);
+      -webkit-backdrop-filter: blur(40px) saturate(200%);
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(14px) saturate(150%);
+      -webkit-backdrop-filter: blur(14px) saturate(150%);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .glass-category {
+      backdrop-filter: blur(12px) saturate(160%);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+
+    /* ── iOS 26 Liquid Glass Floating Tab Bar ─── */
+    .ios-tabbar-dark {
+      background: rgba(22, 22, 26, 0.70);
+      backdrop-filter: blur(48px) saturate(220%) brightness(118%);
+      -webkit-backdrop-filter: blur(48px) saturate(220%) brightness(118%);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow:
+        0 8px 40px rgba(0,0,0,0.50),
+        0 2px 12px rgba(0,0,0,0.28),
+        inset 0 1px 0 rgba(255,255,255,0.10),
+        inset 0 -1px 0 rgba(0,0,0,0.20);
+      border-radius: 999px;
+    }
+    .ios-tabbar-light {
+      background: rgba(242, 242, 246, 0.85);
+      backdrop-filter: blur(48px) saturate(200%) brightness(105%);
+      -webkit-backdrop-filter: blur(48px) saturate(200%) brightness(105%);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      box-shadow:
+        0 8px 32px rgba(0,0,0,0.14),
+        0 2px 8px rgba(0,0,0,0.08),
+        inset 0 1px 0 rgba(255,255,255,1.0),
+        inset 0 -1px 0 rgba(0,0,0,0.04);
+      border-radius: 999px;
+    }
+    .tab-active-pill-dark {
+      background: rgba(168,0,0,0.16);
+      border-radius: 999px;
+    }
+    .tab-active-pill-light {
+      background: rgba(168,0,0,0.10);
+      border-radius: 999px;
+    }
+
+    /* ── Map dark background ──────────────────── */
+    .map-dark {
+      background: #1a2035;
+      background-image:
+        /* roads */
+        repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(56,65,78,0.6) 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(56,65,78,0.6) 40px),
+        /* highway accent */
+        repeating-linear-gradient(45deg, transparent, transparent 79px, rgba(116,104,85,0.25) 80px),
+        /* base gradient */
+        radial-gradient(ellipse at 60% 40%, #1e2d45 0%, #141926 55%, #0d1117 100%);
+    }
+    .map-light {
+      background: #e8e0d6;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(180,170,155,0.7) 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(180,170,155,0.7) 40px),
+        repeating-linear-gradient(45deg, transparent, transparent 79px, rgba(200,190,170,0.35) 80px),
+        radial-gradient(ellipse at 50% 50%, #ede5d8 0%, #ddd4c5 60%, #cec4b4 100%);
+    }
+
+    /* ── iPhone frame ─────────────────────────── */
+    .phone-frame {
+      width: 393px;
+      height: 852px;
+      border-radius: 50px;
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+      border: 1.5px solid rgba(255,255,255,0.18);
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 6px #1a1a1a, 0 0 0 7px #2a2a2a;
+    }
+
+    /* Dynamic Island */
+    .dynamic-island {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 126px;
+      height: 36px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 100;
+    }
+
+    /* Status bar text */
+    .status-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 54px;
+      z-index: 50;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 28px 8px;
+      justify-content: space-between;
+    }
+    .status-time { font-size: 15px; font-weight: 600; }
+    .status-icons { display: flex; gap: 6px; align-items: center; }
+
+    /* Stories */
+    .story-ring-active { border: 2px solid #a80000; }
+    .story-ring-viewed { border: 2px solid rgba(120,120,140,0.7); }
+    .story-ring-create { border: 2px solid #a80000; }
+
+    /* Swipe card effect */
+    .swipe-card {
+      background: linear-gradient(160deg, #1a1f2e 0%, #0d1117 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* Category selected ring */
+    .cat-selected { box-shadow: 0 0 0 2px rgba(168,85,247,0.8), inset 0 0 0 1px rgba(168,85,247,0.4); }
+
+    /* FAB recommendation */
+    .fab-rec {
+      background: #262626;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08);
+    }
+
+    /* Hero gradient overlay */
+    .hero-overlay {
+      background: linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.0) 40%, rgba(0,0,0,0.75) 80%, rgba(0,0,0,0.92) 100%);
+    }
+
+    /* Place content card */
+    .place-card { background: #0a0a0a; border-radius: 28px 28px 0 0; }
+    .place-card-light { background: #f4f4f5; border-radius: 28px 28px 0 0; }
+
+    /* Scrollbar hidden */
+    .no-scroll::-webkit-scrollbar { display: none; }
+
+    /* Map marker */
+    .map-marker {
+      background: #a80000;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 12px 12px 12px 2px;
+      padding: 4px 8px;
+      box-shadow: 0 3px 10px rgba(168,0,0,0.5);
+    }
+    .map-marker::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 3px;
+      width: 8px; height: 8px;
+      background: #a80000;
+      clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+  </style>
+</head>
+<body class="bg-neutral-900 min-h-screen p-10">
+
+  <!-- Title row -->
+  <div class="mb-8">
+    <div class="text-white text-3xl font-bold tracking-tight">Nexo — Home Screen Flow</div>
+    <div class="text-neutral-400 text-sm mt-1">8 frames · iPhone 14 Pro (393×852) · Liquid Glass Design System</div>
+  </div>
+
+  <!-- Frames row -->
+  <div class="flex flex-row gap-10 overflow-x-auto no-scroll pb-10">
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 1 — Home Dark Mode                           -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">01 · Home Dark</div>
+      <div class="phone-frame map-dark">
+        <div class="dynamic-island"></div>
+        <!-- Status bar -->
+        <div class="status-bar">
+          <span class="status-time text-white">9:41</span>
+          <div class="status-icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="white"><rect x="0" y="3" width="3" height="9" rx="1" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" opacity="0.6"/><rect x="9" y="0" width="3" height="12" rx="1"/><rect x="14" y="1" width="2.5" height="10" rx="1.2" fill="none" stroke="white" stroke-width="1"/><rect x="14.5" y="3.5" width="1.5" height="5" rx="0.4"/></svg>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="white" stroke-width="1.5"><path d="M1 4.5C3.5 2 6 1 8 1s4.5 1 7 3.5"/><path d="M3 7c1.4-1.4 3-2.2 5-2.2s3.6.8 5 2.2"/><path d="M5.5 9.5C6.3 8.7 7.1 8.3 8 8.3s1.7.4 2.5 1.2"/><circle cx="8" cy="11" r="1" fill="white"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="white"><rect x="0" y="1" width="22" height="10" rx="3" fill="none" stroke="white" stroke-width="1.2"/><rect x="22.5" y="3.5" width="2" height="5" rx="1"/><rect x="1.2" y="2.2" width="16" height="7.6" rx="1.8"/></svg>
+          </div>
+        </div>
+
+        <!-- Stories carousel -->
+        <div class="absolute left-4 right-4 z-10" style="top: 62px;">
+          <div class="flex flex-row gap-3 overflow-x-auto no-scroll py-2 px-0">
+            <!-- My Story -->
+            <div class="flex flex-col items-center gap-1 flex-shrink-0">
+              <div class="story-ring-create rounded-full" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
+                  <div class="w-full h-full bg-gradient-to-br from-neutral-600 to-neutral-800 flex items-center justify-center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                  </div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400">La tua</span>
+            </div>
+            <!-- Story 1 (unseen) -->
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-rose-900 to-pink-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border: 1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400" style="max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">marco_r</span>
+            </div>
+            <!-- Story 2 (unseen) -->
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-blue-900 to-indigo-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border: 1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-orange-400 to-red-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400" style="max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">giulia_minchia</span>
+            </div>
+            <!-- Story 3 (viewed) -->
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-viewed rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-neutral-700 to-neutral-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border: 1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-green-500 to-teal-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-500" style="max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">carlo_v</span>
+            </div>
+            <!-- Story 4 (viewed) -->
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-viewed rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-neutral-700 to-neutral-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border: 1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-yellow-400 to-orange-400"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-500" style="max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">sara_l</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map markers -->
+        <div class="absolute" style="top: 38%; left: 30%;">
+          <div class="map-marker relative">Bar<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div>
+        </div>
+        <div class="absolute" style="top: 52%; left: 55%;">
+          <div class="map-marker relative">Club<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div>
+        </div>
+        <div class="absolute" style="top: 62%; left: 22%;">
+          <div class="map-marker relative">Pub<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div>
+        </div>
+        <!-- User dot -->
+        <div class="absolute" style="top: 48%; left: 44%;">
+          <div class="w-4 h-4 rounded-full bg-blue-500 border-2 border-white" style="box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>
+        </div>
+
+        <!-- Bottom overlay buttons -->
+        <div class="absolute right-4 flex flex-col gap-2.5" style="bottom: 92px;">
+          <!-- Filter -->
+          <div class="glass-btn-dark flex items-center justify-center cursor-pointer" style="width:60px;height:60px;border-radius:999px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          </div>
+          <!-- Location -->
+          <div class="glass-btn-dark flex items-center justify-center cursor-pointer" style="width:60px;height:60px;border-radius:999px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          </div>
+        </div>
+
+        <!-- Native iOS Liquid Glass Tab Bar – Dark -->
+        <div class="absolute left-4 right-4" style="bottom:14px;z-index:50;">
+          <div class="ios-tabbar-dark flex items-center justify-around" style="height:62px;padding:0 4px;">
+            <div class="tab-active-pill-dark flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 20px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#a80000" stroke="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+              <span style="font-size:10px;color:#a80000;font-weight:700;letter-spacing:0.1px;">Home</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Cerca</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Messaggi</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Notifiche</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Profilo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 2 — Home Light Mode                          -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">02 · Home Light</div>
+      <div class="phone-frame map-light">
+        <div class="dynamic-island"></div>
+        <div class="status-bar">
+          <span class="status-time text-neutral-900">9:41</span>
+          <div class="status-icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="#1a1a1a"><rect x="0" y="3" width="3" height="9" rx="1" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" opacity="0.6"/><rect x="9" y="0" width="3" height="12" rx="1"/><rect x="14" y="1" width="2.5" height="10" rx="1.2" fill="none" stroke="#1a1a1a" stroke-width="1"/><rect x="14.5" y="3.5" width="1.5" height="5" rx="0.4"/></svg>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="#1a1a1a" stroke-width="1.5"><path d="M1 4.5C3.5 2 6 1 8 1s4.5 1 7 3.5"/><path d="M3 7c1.4-1.4 3-2.2 5-2.2s3.6.8 5 2.2"/><path d="M5.5 9.5C6.3 8.7 7.1 8.3 8 8.3s1.7.4 2.5 1.2"/><circle cx="8" cy="11" r="1" fill="#1a1a1a"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="#1a1a1a"><rect x="0" y="1" width="22" height="10" rx="3" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><rect x="22.5" y="3.5" width="2" height="5" rx="1"/><rect x="1.2" y="2.2" width="16" height="7.6" rx="1.8"/></svg>
+          </div>
+        </div>
+
+        <!-- Stories carousel (light) -->
+        <div class="absolute left-4 right-4 z-10" style="top: 62px;">
+          <div class="flex flex-row gap-3 overflow-x-auto no-scroll py-2">
+            <div class="flex flex-col items-center gap-1 flex-shrink-0">
+              <div class="story-ring-create rounded-full" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full bg-gray-200 flex items-center justify-center">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-gray-500">La tua</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-rose-400 to-pink-300"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-white flex items-center justify-center" style="border: 1.5px solid #f4f4f5;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-gray-600">marco_r</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-blue-400 to-indigo-300"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-white flex items-center justify-center" style="border: 1.5px solid #f4f4f5;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-orange-400 to-red-400"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-gray-600">giulia_m</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-viewed rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-gray-300 to-gray-400"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-white flex items-center justify-center" style="border: 1.5px solid #f4f4f5;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-green-400 to-teal-400"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-gray-500">carlo_v</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Light map markers -->
+        <div class="absolute" style="top: 38%; left: 30%;">
+          <div class="map-marker relative">Bar<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div>
+        </div>
+        <div class="absolute" style="top: 52%; left: 55%;">
+          <div class="map-marker relative">Club<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div>
+        </div>
+        <!-- User dot -->
+        <div class="absolute" style="top: 48%; left: 44%;">
+          <div class="w-4 h-4 rounded-full bg-blue-500 border-2 border-white" style="box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div>
+        </div>
+
+        <!-- Bottom overlay buttons (light) -->
+        <div class="absolute right-4 flex flex-col gap-2.5" style="bottom: 92px;">
+          <div class="glass-btn-light flex items-center justify-center cursor-pointer" style="width:60px;height:60px;border-radius:999px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          </div>
+          <div class="glass-btn-light flex items-center justify-center cursor-pointer" style="width:60px;height:60px;border-radius:999px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          </div>
+        </div>
+
+        <!-- Native iOS Liquid Glass Tab Bar – Light -->
+        <div class="absolute left-4 right-4" style="bottom:14px;z-index:50;">
+          <div class="ios-tabbar-light flex items-center justify-around" style="height:62px;padding:0 4px;">
+            <div class="tab-active-pill-light flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#a80000" stroke="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+              <span style="font-size:10px;color:#a80000;font-weight:700;letter-spacing:0.1px;">Home</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span style="font-size:10px;color:rgba(0,0,0,0.35);font-weight:500;">Cerca</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              <span style="font-size:10px;color:rgba(0,0,0,0.35);font-weight:500;">Messaggi</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+              <span style="font-size:10px;color:rgba(0,0,0,0.35);font-weight:500;">Notifiche</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.38)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font-size:10px;color:rgba(0,0,0,0.35);font-weight:500;">Profilo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 3 — Home + Recommendations FAB               -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">03 · + Recommendations</div>
+      <div class="phone-frame map-dark">
+        <div class="dynamic-island"></div>
+        <div class="status-bar">
+          <span class="status-time text-white">9:41</span>
+          <div class="status-icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="white"><rect x="0" y="3" width="3" height="9" rx="1" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" opacity="0.6"/><rect x="9" y="0" width="3" height="12" rx="1"/><rect x="14" y="1" width="2.5" height="10" rx="1.2" fill="none" stroke="white" stroke-width="1"/><rect x="14.5" y="3.5" width="1.5" height="5" rx="0.4"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="white"><rect x="0" y="1" width="22" height="10" rx="3" fill="none" stroke="white" stroke-width="1.2"/><rect x="22.5" y="3.5" width="2" height="5" rx="1"/><rect x="1.2" y="2.2" width="16" height="7.6" rx="1.8"/></svg>
+          </div>
+        </div>
+        <!-- Stories (same as frame 1) -->
+        <div class="absolute left-4 right-4 z-10" style="top: 62px;">
+          <div class="flex flex-row gap-3 overflow-x-auto no-scroll py-2">
+            <div class="flex flex-col items-center gap-1 flex-shrink-0">
+              <div class="story-ring-create rounded-full" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400">La tua</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-rose-900 to-pink-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border:1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400">marco_r</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-shrink-0 relative">
+              <div class="story-ring-active rounded-full relative" style="width:66px;height:66px;padding:2px;">
+                <div class="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-blue-900 to-indigo-800"></div>
+                <div class="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-neutral-900 flex items-center justify-center" style="border:1.5px solid #0a0a0a;">
+                  <div class="w-4 h-4 rounded-full bg-gradient-to-br from-orange-400 to-red-500"></div>
+                </div>
+              </div>
+              <span class="text-xs font-medium text-neutral-400">giulia_m</span>
+            </div>
+          </div>
+        </div>
+        <!-- Markers + user dot -->
+        <div class="absolute" style="top: 38%; left: 30%;"><div class="map-marker relative">Bar<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div></div>
+        <div class="absolute" style="top: 52%; left: 55%;"><div class="map-marker relative">Club<div style="position:absolute;bottom:-5px;left:3px;width:8px;height:8px;background:#a80000;clip-path:polygon(0 0,100% 0,0 100%);"></div></div></div>
+        <div class="absolute" style="top: 48%; left: 44%;"><div class="w-4 h-4 rounded-full bg-blue-500 border-2 border-white" style="box-shadow:0 0 0 4px rgba(59,130,246,0.3);"></div></div>
+
+        <!-- Bottom overlay: row with Sparkles (left) + Location+Filter (right) -->
+        <div class="absolute left-4 right-4 flex flex-row justify-between items-end" style="bottom: 92px;">
+          <!-- Recommendations FAB -->
+          <div class="fab-rec flex items-center justify-center cursor-pointer" style="width:60px;height:60px;border-radius:999px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a80000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.9 5.9H20l-5.1 3.7 1.9 5.9L12 15l-4.8 3.5 1.9-5.9L4 8.9h6.1L12 3z"/>
+            </svg>
+          </div>
+          <!-- Location + Filter group -->
+          <div class="flex flex-col gap-2.5">
+            <div class="glass-btn-dark flex items-center justify-center" style="width:60px;height:60px;border-radius:999px;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            </div>
+            <div class="glass-btn-dark flex items-center justify-center" style="width:60px;height:60px;border-radius:999px;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Native iOS Liquid Glass Tab Bar – Dark (Frame 3) -->
+        <div class="absolute left-4 right-4" style="bottom:14px;z-index:50;">
+          <div class="ios-tabbar-dark flex items-center justify-around" style="height:62px;padding:0 4px;">
+            <div class="tab-active-pill-dark flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#a80000" stroke="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+              <span style="font-size:10px;color:#a80000;font-weight:700;">Home</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Cerca</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Messaggi</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Notifiche</span>
+            </div>
+            <div class="flex flex-col items-center gap-0.5 cursor-pointer" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font-size:10px;color:rgba(255,255,255,0.38);font-weight:500;">Profilo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 4 — Create Menu Sheet                        -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">04 · Create Menu Sheet</div>
+      <div class="phone-frame map-dark">
+        <div class="dynamic-island"></div>
+        <!-- dimmed background -->
+        <div class="absolute inset-0 z-20" style="background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);"></div>
+
+        <!-- Status bar -->
+        <div class="status-bar" style="z-index:30;">
+          <span class="status-time text-white">9:41</span>
+          <div class="status-icons">
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="white"><rect x="0" y="1" width="22" height="10" rx="3" fill="none" stroke="white" stroke-width="1.2"/><rect x="22.5" y="3.5" width="2" height="5" rx="1"/><rect x="1.2" y="2.2" width="16" height="7.6" rx="1.8"/></svg>
+          </div>
+        </div>
+
+        <!-- Modal sheet -->
+        <div class="absolute left-4 right-4 glass-modal" style="top:15%;z-index:30;border-radius:44px;padding:20px 24px;">
+          <!-- Item: Crea Storia -->
+          <div class="flex items-center gap-4 cursor-pointer" style="padding:18px 16px;border-radius:20px;background:rgba(255,255,255,0.04);">
+            <div class="flex items-center justify-center flex-shrink-0" style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.10);">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a80000" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-white font-semibold" style="font-size:16px;">Crea Storia</span>
+              <span style="font-size:13px;color:rgba(255,255,255,0.45);margin-top:2px;">Scompare dopo 24 ore</span>
+            </div>
+          </div>
+          <!-- Divider -->
+          <div style="height:1px;background:rgba(255,255,255,0.08);margin:4px 0;"></div>
+          <!-- Item: Annulla -->
+          <div class="flex items-center gap-4 cursor-pointer" style="padding:18px 16px;border-radius:20px;">
+            <div class="flex items-center justify-center flex-shrink-0" style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.07);">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+            <span style="font-size:16px;color:#f87171;font-weight:500;">Annulla</span>
+          </div>
+        </div>
+
+        <!-- Bottom (dimmed) -->
+        <div class="absolute left-4 right-4 flex flex-col gap-2.5" style="bottom:120px;z-index:22;opacity:0.25;">
+          <div class="glass-btn-dark flex items-center justify-center" style="width:60px;height:60px;border-radius:999px;align-self:flex-end;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          </div>
+          <div class="glass-btn-dark flex items-center justify-center" style="width:60px;height:60px;border-radius:999px;align-self:flex-end;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          </div>
+        </div>
+        <!-- Native iOS Liquid Glass Tab Bar – Dimmed (Frame 4) -->
+        <div class="absolute left-4 right-4" style="bottom:14px;z-index:22;opacity:0.28;">
+          <div class="ios-tabbar-dark flex items-center justify-around" style="height:62px;padding:0 4px;">
+            <div class="tab-active-pill-dark flex flex-col items-center gap-0.5" style="padding:7px 14px;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#a80000"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+              <span style="font-size:10px;color:#a80000;font-weight:700;">Home</span>
+            </div>
+            <div style="padding:7px 14px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+            <div style="padding:7px 14px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+            <div style="padding:7px 14px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+            <div style="padding:7px 14px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 5 — Place Type Filter Sheet                  -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">05 · Filter Sheet</div>
+      <div class="phone-frame map-dark">
+        <div class="dynamic-island"></div>
+        <div class="absolute inset-0 z-10" style="background:rgba(0,0,0,0.65);"></div>
+        <div class="status-bar" style="z-index:30;">
+          <span class="status-time text-white">9:41</span>
+        </div>
+
+        <!-- Bottom sheet -->
+        <div class="absolute left-0 right-0 bottom-0 glass-sheet" style="z-index:30;border-radius:28px 28px 0 0;height:70%;">
+          <!-- Handle -->
+          <div class="flex justify-center pt-3 pb-1">
+            <div style="width:40px;height:5px;background:rgba(255,255,255,0.35);border-radius:3px;"></div>
+          </div>
+          <!-- Header -->
+          <div class="flex justify-between items-center px-6 pt-4 pb-5">
+            <span class="text-white font-bold" style="font-size:20px;">Categorie</span>
+            <div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:6px 14px;cursor:pointer;">
+              <span class="text-white font-medium" style="font-size:14px;">Fatto</span>
+            </div>
+          </div>
+          <!-- Grid -->
+          <div class="px-4" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            <!-- Tutti (selected) -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(99,102,241,0.22);border:1px solid rgba(99,102,241,0.55);box-shadow:0 0 0 1.5px rgba(99,102,241,0.4);">
+              <span style="font-size:22px;">🏙️</span>
+              <span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.9);">Tutti</span>
+            </div>
+            <!-- Bar -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(236,72,153,0.18);">
+              <span style="font-size:22px;">🍹</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Bar</span>
+            </div>
+            <!-- Club -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(168,85,247,0.18);">
+              <span style="font-size:22px;">🎶</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Club</span>
+            </div>
+            <!-- Restaurant -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(251,146,60,0.18);">
+              <span style="font-size:22px;">🍽️</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Ristorante</span>
+            </div>
+            <!-- Pub -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(251,191,36,0.18);">
+              <span style="font-size:22px;">🍺</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Pub</span>
+            </div>
+            <!-- Lounge -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(59,130,246,0.18);">
+              <span style="font-size:22px;">🛋️</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Lounge</span>
+            </div>
+            <!-- Caffè -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(139,92,246,0.18);">
+              <span style="font-size:22px;">☕</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);">Caffè</span>
+            </div>
+            <!-- Altro -->
+            <div class="glass-category flex flex-col items-center justify-center gap-1.5 cursor-pointer" style="height:70px;border-radius:16px;background:rgba(156,163,175,0.15);">
+              <span style="font-size:22px;">📍</span>
+              <span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.65);">Altro</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 6 — Daily Recommendations                    -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">06 · Daily Recommendations</div>
+      <div class="phone-frame" style="background:#08090d;">
+        <div class="dynamic-island"></div>
+        <div class="status-bar">
+          <span class="status-time text-white">9:41</span>
+          <div class="status-icons">
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="white"><rect x="0" y="1" width="22" height="10" rx="3" fill="none" stroke="white" stroke-width="1.2"/><rect x="22.5" y="3.5" width="2" height="5" rx="1"/><rect x="1.2" y="2.2" width="16" height="7.6" rx="1.8"/></svg>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="absolute left-0 right-0 flex items-center px-5 gap-3" style="top:54px;height:56px;background:rgba(14,16,22,0.75);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a80000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.9H20l-5.1 3.7 1.9 5.9L12 15l-4.8 3.5 1.9-5.9L4 8.9h6.1L12 3z"/></svg>
+          <div class="flex flex-col">
+            <span class="text-white font-bold" style="font-size:17px;">Per Te</span>
+            <span style="font-size:12px;color:rgba(255,255,255,0.45);">Swipa per scoprire eventi</span>
+          </div>
+          <div class="ml-auto flex items-center gap-2 cursor-pointer" style="background:rgba(255,255,255,0.08);border-radius:20px;padding:6px 12px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#a80000" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            <span style="font-size:13px;color:white;font-weight:600;">3</span>
+          </div>
+        </div>
+
+        <!-- Swipe card -->
+        <div class="absolute swipe-card" style="top:126px;left:20px;right:20px;bottom:100px;border-radius:28px;overflow:hidden;">
+          <!-- Mock event image gradient -->
+          <div class="absolute inset-0" style="background:linear-gradient(135deg,#1a2a4a 0%,#0d1f35 40%,#0a1520 100%);"></div>
+          <!-- Decorative circles -->
+          <div class="absolute" style="top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(168,0,0,0.25) 0%,transparent 70%);border-radius:50%;"></div>
+          <div class="absolute" style="bottom:60px;left:-30px;width:160px;height:160px;background:radial-gradient(circle,rgba(59,130,246,0.15) 0%,transparent 70%);border-radius:50%;"></div>
+          <!-- Gradient overlay -->
+          <div class="absolute inset-0 hero-overlay"></div>
+          <!-- Event info -->
+          <div class="absolute bottom-0 left-0 right-0 p-6">
+            <div class="flex items-center gap-2 mb-3">
+              <span style="background:rgba(168,0,0,0.3);border:1px solid rgba(168,0,0,0.6);border-radius:20px;padding:3px 10px;font-size:11px;color:rgba(255,255,255,0.9);font-weight:600;">STASERA</span>
+              <span style="background:rgba(255,255,255,0.1);border-radius:20px;padding:3px 10px;font-size:11px;color:rgba(255,255,255,0.7);">Club</span>
+            </div>
+            <div class="text-white font-bold mb-1" style="font-size:24px;line-height:1.2;letter-spacing:-0.5px;">Notte Latina<br/>Roma</div>
+            <div class="flex items-center gap-1 mt-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span style="font-size:13px;color:rgba(255,255,255,0.55);">Ven 7 Mar · 23:00</span>
+              <span class="ml-3" style="font-size:13px;color:rgba(255,255,255,0.45);">📍 Pigneto, Roma</span>
+            </div>
+          </div>
+          <!-- Swipe indicators -->
+          <div class="absolute top-1/2 left-4 flex items-center gap-1 opacity-40" style="transform:translateY(-50%);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          </div>
+          <div class="absolute top-1/2 right-4 flex items-center gap-1 opacity-40" style="transform:translateY(-50%);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="absolute left-0 right-0 text-center" style="bottom:72px;">
+          <span style="font-size:13px;color:rgba(255,255,255,0.4);font-weight:500;">2 / 5 eventi</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 7 — Story Viewer                             -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">07 · Story Viewer</div>
+      <div class="phone-frame" style="background:#000;">
+        <div class="dynamic-island"></div>
+
+        <!-- Full screen story image -->
+        <div class="absolute inset-0" style="background:linear-gradient(160deg,#1a0a0a 0%,#0d0510 50%,#050308 100%);"></div>
+        <!-- Decorative -->
+        <div class="absolute" style="top:20%;left:10%;width:280px;height:280px;background:radial-gradient(circle,rgba(168,0,0,0.18) 0%,transparent 65%);border-radius:50%;"></div>
+        <div class="absolute" style="bottom:25%;right:5%;width:200px;height:200px;background:radial-gradient(circle,rgba(99,102,241,0.12) 0%,transparent 65%);border-radius:50%;"></div>
+
+        <!-- Safe area top -->
+        <div class="absolute left-0 right-0" style="top:54px;z-index:20;">
+          <!-- Progress bars -->
+          <div class="flex gap-2 px-3 pt-2">
+            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.3);">
+              <div class="h-full rounded-full bg-white" style="width:100%;"></div>
+            </div>
+            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.3);">
+              <div class="h-full rounded-full bg-white" style="width:60%;"></div>
+            </div>
+            <div class="flex-1 h-1 rounded-full" style="background:rgba(255,255,255,0.3);"></div>
+          </div>
+          <!-- Header -->
+          <div class="flex items-center gap-3 px-4 py-3">
+            <div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0" style="border:1.5px solid rgba(255,255,255,0.5);">
+              <div class="w-full h-full bg-gradient-to-br from-rose-600 to-pink-700"></div>
+            </div>
+            <div class="flex flex-col flex-1">
+              <span class="text-white font-semibold" style="font-size:14px;">marco_r</span>
+              <span style="font-size:12px;color:rgba(255,255,255,0.55);">2m fa</span>
+            </div>
+            <div class="cursor-pointer p-2">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Story content area (center) -->
+        <div class="absolute left-8 right-8 flex items-center justify-center" style="top:40%;transform:translateY(-50%);">
+          <div style="background:rgba(0,0,0,0.4);border-radius:12px;padding:12px 20px;text-align:center;">
+            <span class="text-white font-bold" style="font-size:26px;letter-spacing:-0.5px;">El Tropicana 🔥<br/>Stasera si balla!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FRAME 8 — Place Detail                             -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div>
+      <div class="text-neutral-500 text-xs font-medium mb-3 text-center tracking-widest uppercase">08 · Place Detail</div>
+      <div class="phone-frame" style="background:#0a0a0a;">
+        <div class="dynamic-island"></div>
+
+        <!-- Hero (35% height = ~298px) with thumbnail straddling -->
+        <div class="absolute left-0 right-0" style="top:0;height:298px;overflow:visible;">
+          <!-- Hero image placeholder -->
+          <div class="absolute inset-0" style="background:linear-gradient(135deg,#1a1f2e 0%,#0d1520 100%);overflow:hidden;border-radius:0;">
+            <div class="absolute" style="top:-20px;right:-20px;width:260px;height:260px;background:radial-gradient(circle,rgba(168,0,0,0.2) 0%,transparent 65%);border-radius:50%;"></div>
+          </div>
+          <!-- Gradient overlay -->
+          <div class="absolute inset-0 hero-overlay" style="border-radius:0;"></div>
+          <!-- Buttons -->
+          <div class="absolute" style="top:60px;left:16px;">
+            <div class="flex items-center justify-center cursor-pointer" style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.45);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </div>
+          </div>
+          <div class="absolute" style="top:60px;right:16px;">
+            <div class="flex items-center justify-center cursor-pointer" style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.45);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)" stroke="white" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            </div>
+          </div>
+          <!-- Hero text (aligned with thumbnail) -->
+          <div class="absolute left-4 right-28" style="bottom:52px;">
+            <div class="text-white font-bold" style="font-size:28px;letter-spacing:-0.4px;text-shadow:0 1px 4px rgba(0,0,0,0.6);line-height:1.2;">El Tropicana</div>
+            <div style="font-size:15px;color:rgba(255,255,255,0.75);font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.5);margin-top:2px;">Club & Lounge</div>
+          </div>
+          <!-- Thumbnail poster (overlaps hero and content) -->
+          <div class="absolute z-30" style="right:16px;bottom:-24px;width:88px;height:136px;border-radius:12px;background:linear-gradient(160deg,#2a1535,#1a0d2a);border:2px solid rgba(255,255,255,0.25);box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden;">
+            <div class="absolute inset-0 flex items-center justify-center">
+              <span style="font-size:36px;">🌴</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Content card -->
+        <div class="place-card absolute left-0 right-0" style="top:274px;bottom:0;padding:24px 16px 20px;overflow:hidden;">
+          <!-- Section: Info -->
+          <div class="flex items-start gap-3 mb-3 mt-8">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <div>
+              <div class="text-white font-medium" style="font-size:14px;">Via del Pigneto 42, Roma</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:2px;">1.2 km da te</div>
+            </div>
+          </div>
+          <!-- Row: Map + Phone + Website icons -->
+          <div class="flex items-center gap-3 mb-4" style="margin-left:32px;">
+            <!-- Map/Directions -->
+            <div class="flex items-center justify-center cursor-pointer" style="width:44px;height:44px;border-radius:12px;background:rgba(168,0,0,0.9);border:1px solid rgba(168,0,0,0.3);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <!-- Phone -->
+            <div class="flex items-center justify-center cursor-pointer" style="width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012 .5h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.38a16 16 0 006.29 6.29l1.24-1.24a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            </div>
+            <!-- Website -->
+            <div class="flex items-center justify-center cursor-pointer" style="width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+            </div>
+          </div>
+          <!-- Divider -->
+          <div style="height:1px;background:rgba(255,255,255,0.07);margin-bottom:16px;"></div>
+          <!-- Section: Description -->
+          <div class="mb-5">
+            <div class="text-white font-semibold mb-2" style="font-size:15px;">Descrizione</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;">Il locale più esclusivo del Pigneto. Musica latina, cocktail artigianali e un'atmosfera unica...</div>
+          </div>
+          <!-- Divider -->
+          <div style="height:1px;background:rgba(255,255,255,0.07);margin-bottom:16px;"></div>
+
+          <!-- Events Section - 2 columns grid -->
+          <div class="mb-5">
+            <div class="text-white font-semibold mb-3" style="font-size:15px;">Eventi</div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+              <!-- Event Card 1 -->
+              <div class="cursor-pointer" style="aspect-ratio:9/16;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(135deg,#3d1a4a 0%,#1a0f25 100%);">
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span style="font-size:48px;">💃</span>
+                </div>
+                <div class="absolute inset-0" style="background:linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.3) 40%,transparent 100%);"></div>
+                <div class="absolute bottom-0 left-0 right-0 p-3">
+                  <div class="text-white font-bold" style="font-size:14px;line-height:1.2;">Sabato Latino Night</div>
+                  <div class="text-white" style="font-size:11px;opacity:0.75;margin-top:2px;">Sab 8 Mar · 23:00</div>
+                </div>
+              </div>
+              <!-- Event Card 2 -->
+              <div class="cursor-pointer" style="aspect-ratio:9/16;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(135deg,#1a2a4a 0%,#0f1a25 100%);">
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span style="font-size:48px;">🍸</span>
+                </div>
+                <div class="absolute inset-0" style="background:linear-gradient(to top,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0.3) 40%,transparent 100%);"></div>
+                <div class="absolute bottom-0 left-0 right-0 p-3">
+                  <div class="text-white font-bold" style="font-size:14px;line-height:1.2;">Cocktail Premium</div>
+                  <div class="text-white" style="font-size:11px;opacity:0.75;margin-top:2px;">Ven 14 Mar · 22:00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Divider -->
+          <div style="height:1px;background:rgba(255,255,255,0.07);margin-bottom:16px;"></div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end frames row -->
+
+  <!-- Legend -->
+  <div class="mt-8 flex flex-wrap gap-6">
+    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full" style="background:#a80000;"></div><span class="text-neutral-500 text-xs">Primary — hsl(359 100% 33%)</span></div>
+    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-neutral-950 border border-neutral-700"></div><span class="text-neutral-500 text-xs">Background dark — #0a0a0a</span></div>
+    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full" style="background:rgba(24,26,32,0.78);border:1px solid rgba(255,255,255,0.16);"></div><span class="text-neutral-500 text-xs">Glass dark — blur(24px)</span></div>
+    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full" style="background:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.7);"></div><span class="text-neutral-500 text-xs">Glass light — blur(24px)</span></div>
+    <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full" style="background:#1a2035;border:1px solid rgba(56,65,78,0.6);"></div><span class="text-neutral-500 text-xs">Map dark — #1a2035</span></div>
+  </div>
+</body>
+</html>

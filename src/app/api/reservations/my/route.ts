@@ -1,5 +1,4 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
@@ -9,17 +8,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const includePast = searchParams.get('include_past') !== 'false'; // Default true
 
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = await createClient();
 
     const {
       data: { user },

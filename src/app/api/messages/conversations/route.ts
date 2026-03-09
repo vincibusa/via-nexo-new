@@ -143,6 +143,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Resolve avatar path to full public URL (same as Profile / auth)
+    const resolveAvatarUrl = (avatarUrl: string | null | undefined): string | null => {
+      if (!avatarUrl) return null
+      if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) return avatarUrl
+      const { data } = supabase.storage.from('avatars').getPublicUrl(avatarUrl)
+      return data.publicUrl
+    }
+
     // Build response
     const conversations = participations.map((p: any) => {
       const conversation = Array.isArray(p.conversations) ? p.conversations[0] : p.conversations
@@ -167,7 +175,7 @@ export async function GET(request: NextRequest) {
           id: profile.id,
           email: profile.email,
           displayName: profile.display_name,
-          avatarUrl: profile.avatar_url,
+          avatarUrl: resolveAvatarUrl(profile.avatar_url) ?? undefined,
         } : null,
         last_message: lastMessage ? {
           id: lastMessage.id,

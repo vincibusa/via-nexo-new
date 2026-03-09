@@ -16,13 +16,10 @@ export async function GET(request: NextRequest) {
       }
     );
 
+    // Get authenticated user (optional - for follow status)
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     // Get search query and limit from URL params with validation
     const searchParams = request.nextUrl.searchParams;
@@ -78,11 +75,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // PERFORMANCE: Batch query for follow status instead of N+1 queries
+    // PERFORMANCE: Batch query for follow status only if user is logged in
     const profileIds = profiles.map(p => p.id);
 
     let followingSet = new Set<string>();
-    if (profileIds.length > 0) {
+    if (profileIds.length > 0 && user) {
       const { data: followData, error: followError } = await supabase
         .from('follows')
         .select('following_id')

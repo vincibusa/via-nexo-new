@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     // Fetch user profile with role
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, display_name, avatar_url')
+      .select('role, display_name, avatar_url, metadata')
       .eq('id', authData.user.id)
       .single()
 
@@ -127,6 +127,8 @@ export async function POST(request: NextRequest) {
           role: profile.role,
           displayName: profile.display_name,
           avatarUrl: profile.avatar_url,
+          gender: profile.metadata?.gender || null,
+          age: profile.metadata?.age || null,
         },
         session: {
           accessToken: authData.session?.access_token,
