@@ -98,6 +98,7 @@ async function handleSignup(request: NextRequest, context: ErrorContext): Promis
         display_name: displayName || email.split('@')[0],
         gender: gender || null,
         age: age || null,
+        onboarding_completed: false,
       },
     },
   })

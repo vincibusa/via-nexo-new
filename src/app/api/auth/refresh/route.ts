@@ -102,6 +102,8 @@ export async function POST(request: NextRequest) {
           avatarUrl: profile.avatar_url,
           gender: profile.metadata?.gender || null,
           age: profile.metadata?.age || null,
+          onboardingCompleted: profile.metadata?.onboarding_completed ?? null,
+          initialPreferences: profile.metadata?.initial_preferences ?? null,
         },
         session: {
           accessToken: authData.session.access_token,

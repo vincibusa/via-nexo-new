@@ -205,7 +205,7 @@ export async function POST(
       guest_count: guest_ids.length,
     });
 
-    // Get event settings with place location for distance validation
+    // Get event settings with place location for distance validation (same join pattern as GET /api/events/[id])
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select(`
@@ -219,21 +219,21 @@ export async function POST(
         prive_min_price,
         prive_max_seats,
         prive_deposit_required,
-        booking_radius_km,
-        place:places!events_place_id_fkey(
+        place:places(
           id,
           name,
           address,
           city,
           lat,
-          lon,
-          booking_radius_km
+          lon
         )
       `)
       .eq('id', id)
+      .eq('is_published', true)
       .single();
 
     if (eventError || !event) {
+      console.error('[Reservations] Event fetch failed:', { id, eventError, event })
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
@@ -255,11 +255,8 @@ export async function POST(
       venue.lon
     );
 
-    // Determine booking radius (priority: event > place > default 10km)
     const DEFAULT_BOOKING_RADIUS = 10;
-    const maxBookingRadius = event.booking_radius_km ??
-      venue.booking_radius_km ??
-      DEFAULT_BOOKING_RADIUS;
+    const maxBookingRadius = DEFAULT_BOOKING_RADIUS;
 
     // Check if user is within booking radius
     if (distanceKm > maxBookingRadius) {

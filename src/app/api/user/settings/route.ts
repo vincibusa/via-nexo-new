@@ -9,6 +9,14 @@ const settingsSchema = z.object({
   language: z.enum(['it', 'en']).optional(),
   default_radius_km: z.number().min(0.5).max(50).optional(),
   theme: z.enum(['light', 'dark', 'system']).optional(),
+  onboarding_completed: z.boolean().optional(),
+  initial_preferences: z.object({
+    partyTypes: z.array(z.string()),
+    musicGenres: z.array(z.string()),
+    budget: z.string(),
+    companionship: z.string(),
+    ambiences: z.array(z.string()),
+  }).optional(),
 })
 
 /**
@@ -130,6 +138,8 @@ export async function PATCH(request: NextRequest) {
       language: updatedMetadata.language || 'it',
       default_radius_km: updatedMetadata.default_radius_km || 50,
       theme: updatedMetadata.theme || 'system',
+      onboarding_completed: updatedMetadata.onboarding_completed ?? false,
+      initial_preferences: updatedMetadata.initial_preferences ?? null,
     }
 
     return NextResponse.json({

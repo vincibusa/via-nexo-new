@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
         place_type,
         description,
         cover_image_url,
+        image_urls,
         address,
         city,
         postal_code,
@@ -128,12 +129,16 @@ export async function GET(request: NextRequest) {
     // Calculate distance if location provided
     let processedResults = results.map((place: any) => {
       const eventsCount = place.events?.[0]?.count || 0;
+      const rawCover = place.cover_image_url ?? place.cover_image;
+      const rawImages = place.image_urls ?? place.gallery_images;
+      const galleryImages = Array.isArray(rawImages) ? rawImages : rawImages ? [rawImages] : [];
 
       const result: any = {
         ...place,
-        // Map database fields to mobile-friendly names
+        // Map database fields to mobile-friendly names (always expose for map markers)
         category: place.place_type,
-        cover_image: place.cover_image_url,
+        cover_image: rawCover != null && rawCover !== '' ? rawCover : null,
+        gallery_images: galleryImages,
         instagram: place.instagram_handle,
         facebook: place.facebook_url,
         verified: place.verification_status === 'approved',
@@ -146,6 +151,7 @@ export async function GET(request: NextRequest) {
       delete result.events;
       delete result.place_type;
       delete result.cover_image_url;
+      delete result.image_urls;
       delete result.instagram_handle;
       delete result.facebook_url;
       delete result.verification_status;

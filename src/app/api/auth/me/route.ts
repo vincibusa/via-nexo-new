@@ -44,6 +44,8 @@ export async function GET() {
         gender: profile.metadata?.gender || null,
         age: profile.metadata?.age || null,
         metadata: profile.metadata,
+        onboardingCompleted: profile.metadata?.onboarding_completed ?? null,
+        initialPreferences: profile.metadata?.initial_preferences ?? null,
       },
     })
   } catch (error) {
